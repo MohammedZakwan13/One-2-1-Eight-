@@ -1,0 +1,1100 @@
+openapi: 3.1.0
+info:
+  title: ONE 2 1 EIGHT — Storefront & Admin REST API
+  version: 1.0.0
+  summary: Contract the backend must implement for the Next.js storefront and admin console.
+  description: |
+    This document is the **contract** between the frontend (`one2oneight-production`) and a backend that does
+    not exist yet. It is framework-neutral: implement it in any stack.
+
+    ## How the frontend calls it
+    * Browsers call the **same-origin proxy** `/api/v1/*`; the Next.js server forwards to `API_BASE_URL`.
+      Server Components call `API_BASE_URL` directly. `API_BASE_URL` already includes any version prefix, so
+      a frontend request to `/api/v1/products` arrives at your server as `GET {API_BASE_URL}/products`.
+    * Session cookies are set by the backend (`Set-Cookie`) and are passed through the proxy unchanged.
+      They MUST be `HttpOnly; Secure; SameSite=Lax; Path=/`.
+    * Responses are validated in the browser with Zod schemas mirroring `components/schemas` below
+      (`lib/api/schemas.ts`). A response that violates the contract is treated as an error.
+
+    ## Conventions
+    * Money: INR in major units (rupees), JSON numbers, at most 2 decimals.
+    * Timestamps: ISO-8601. All text is UTF-8.
+    * **Everything that touches money, stock or payment state is server-authoritative.** The frontend sends
+      identifiers and quantities, never prices, totals, discounts or payment results.
+    * Errors use one envelope: `{ "error": { "code", "message", "fieldErrors"?, "requestId"? } }`.
+      `message` MUST be safe to show to a shopper (no stack traces, SQL, internal hostnames).
+    * Writes (POST/PUT/PATCH/DELETE) require a CSRF token: call `GET /csrf-token` (sets the `o218_csrf` cookie and
+      returns the token); send it back in `X-CSRF-Token`. Reject mismatches with 403 `csrf_invalid`.
+    * `POST /orders` requires an `Idempotency-Key` header (see operation).
+    * Admin routes require an admin session and RBAC. Customers must never reach them.
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.your-backend.invalid/v1
+    description: "Replace with the real backend base URL (this is what `API_BASE_URL` points to)."
+tags:
+  - name: Platform
+  - name: Catalogue
+  - name: Content
+  - name: Cart
+  - name: Orders & payments
+  - name: Customer auth
+  - name: Reviews
+  - name: Marketing
+  - name: Admin
+security: []
+paths:
+  /health:
+    get:
+      tags: [Platform]
+      operationId: getHealth
+      summary: "Liveness/readiness probe (used by `/api/health?deep=1`)"
+      responses:
+        '200':
+          description: Backend is healthy
+          content:
+            application/json:
+              schema: { type: object, required: [status], properties: { status: { const: ok } } }
+  /csrf-token:
+    get:
+      tags: [Platform]
+      operationId: getCsrfToken
+      summary: Issue a CSRF token (double-submit cookie)
+      description: "Sets cookie `o218_csrf` (HttpOnly, SameSite=Lax) and returns the same value in the body."
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema: { type: object, required: [token], properties: { token: { type: string, minLength: 16 } } }
+
+  /products:
+    get:
+      tags: [Catalogue]
+      operationId: listProducts
+      summary: List active products
+      parameters:
+        - { name: category, in: query, schema: { type: string }, description: Category slug }
+        - { name: collection, in: query, schema: { type: string }, description: 'Collection slug (best-sellers, new-arrivals, one-2-1-eight-luxe, layering-edit)' }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Free-text search (name, category, colour, fit) }
+        - { name: ids, in: query, schema: { type: string }, description: Comma-separated product ids (wishlist hydration, max 100) }
+        - { name: sort, in: query, schema: { type: string, enum: [featured, new, price-low, price-high, rating] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 48 } }
+      responses:
+        '200': { description: Page of products, content: { application/json: { schema: { $ref: '#/components/schemas/ProductList' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /products/{slug}:
+    get:
+      tags: [Catalogue]
+      operationId: getProduct
+      summary: Get one active product (404 when missing or draft)
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      responses:
+        '200': { description: Product, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /products/{slug}/related:
+    get:
+      tags: [Catalogue]
+      operationId: getRelatedProducts
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 12, default: 4 } }
+      responses:
+        '200': { description: Related products, content: { application/json: { schema: { $ref: '#/components/schemas/ProductList' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /products/{slug}/reviews:
+    get:
+      tags: [Reviews]
+      operationId: listProductReviews
+      summary: Published reviews + real aggregates
+      description: "Only `published` reviews are returned and counted. `summary` MUST be computed from the same set."
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      responses:
+        '200': { description: Reviews, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewList' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Reviews]
+      operationId: createProductReview
+      summary: Submit a review (signed-in customers only)
+      description: |
+        The server decides moderation (`pending` recommended) and sets `verifiedPurchase` from order data.
+        Apply rate limiting and spam checks. Returns 401 when not signed in.
+      security: [{ customerSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateReviewRequest' } } } }
+      responses:
+        '201': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/CreateReviewResponse' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /categories:
+    get:
+      tags: [Catalogue]
+      operationId: listCategories
+      summary: Active categories (stable slugs — renaming a category must not change its slug)
+      responses:
+        '200': { description: Categories, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Category' } } } } } } }
+  /collections:
+    get:
+      tags: [Catalogue]
+      operationId: listCollections
+      summary: Curated collections (edits)
+      responses:
+        '200': { description: Collections, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Collection' } } } } } } }
+  /inventory/availability:
+    get:
+      tags: [Catalogue]
+      operationId: getInventoryAvailability
+      summary: Live per-variant availability
+      description: Never expose exact stock above the low-stock threshold.
+      parameters: [{ name: variantIds, in: query, required: true, schema: { type: string }, description: Comma-separated variant ids (max 100) }]
+      responses:
+        '200': { description: Availability, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryAvailability' } } } }
+  /serviceability:
+    get:
+      tags: [Catalogue]
+      operationId: checkServiceability
+      summary: Real pincode serviceability / COD / ETA (courier-backed)
+      parameters: [{ name: pincode, in: query, required: true, schema: { type: string, pattern: '^[1-9][0-9]{5}$' } }]
+      responses:
+        '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/Serviceability' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /content/storefront:
+    get:
+      tags: [Content]
+      operationId: getStorefrontContent
+      summary: Site settings, active hero slides and active categories
+      responses:
+        '200': { description: Content, content: { application/json: { schema: { $ref: '#/components/schemas/StorefrontContent' } } } }
+  /content/pages/{slug}:
+    get:
+      tags: [Content]
+      operationId: getContentPage
+      summary: Published CMS page (terms, privacy, …) — 404 until published
+      description: Plain text; paragraphs separated by a blank line. The frontend never renders it as HTML.
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { $ref: '#/components/schemas/LegalPage' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /cart:
+    get:
+      tags: [Cart]
+      operationId: getCart
+      summary: Current cart (server creates one on first use and sets a cart cookie)
+      description: Totals, discounts and shipping are calculated by the server on every read.
+      responses:
+        '200': { description: Priced cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+  /cart/items:
+    post:
+      tags: [Cart]
+      operationId: addCartItem
+      summary: Add a variant (merges with an existing line; capped by availability)
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddCartItemRequest' } } } }
+      responses:
+        '200': { description: Updated cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /cart/items/{id}:
+    patch:
+      tags: [Cart]
+      operationId: updateCartItem
+      summary: Set a line quantity (0 removes it)
+      security: [{ csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateCartItemRequest' } } } }
+      responses:
+        '200': { description: Updated cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Cart]
+      operationId: removeCartItem
+      security: [{ csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Updated cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+  /cart/coupon:
+    put:
+      tags: [Cart]
+      operationId: applyCoupon
+      summary: Apply a coupon (422 with a shopper-safe message when not applicable)
+      description: Enforce expiry, minimum spend, usage limits and customer eligibility server-side.
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApplyCouponRequest' } } } }
+      responses:
+        '200': { description: Updated cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Cart]
+      operationId: removeCoupon
+      security: [{ csrf: [] }]
+      responses:
+        '200': { description: Updated cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+
+  /orders:
+    post:
+      tags: [Orders & payments]
+      operationId: createOrder
+      summary: Create an order from the current cart
+      description: |
+        1. Re-price the cart and **reserve stock atomically**; fail with 409 (`out_of_stock`, `quantity_changed`) if anything changed.
+        2. Create the order and a payment with the provider. For `cod`, `payment.action` is null and `paymentStatus` is `cod_pending`.
+        3. For online methods return `paymentStatus: pending` and a `payment.action` telling the browser what to do
+           (`redirect` to a hosted page, or `sdk` with provider payload). **The order is marked `paid` only by the verified
+           provider webhook / `POST /payments/{id}/verify`.**
+        4. Empty the cart. Return `lookupToken` so a guest can read the order after the redirect.
+
+        **Idempotency:** the `Idempotency-Key` header is mandatory. Repeating a request with the same key and the same body
+        MUST return the original response (status 200) and never create a second order; the same key with a different body
+        MUST fail with 422 `idempotency_key_reuse`.
+      security: [{ csrf: [] }]
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateOrderRequest' } } } }
+      responses:
+        '201': { description: Order created, content: { application/json: { schema: { $ref: '#/components/schemas/CreateOrderResponse' } } } }
+        '200': { description: Idempotent replay of an earlier request, content: { application/json: { schema: { $ref: '#/components/schemas/CreateOrderResponse' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /orders/{id}:
+    get:
+      tags: [Orders & payments]
+      operationId: getOrder
+      summary: Read an order
+      description: "Allowed with a matching `token` query parameter (guest lookup) OR when the signed-in customer owns the order. Otherwise 404 (do not reveal existence)."
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: token, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Order, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /payments/{id}/verify:
+    post:
+      tags: [Orders & payments]
+      operationId: verifyPayment
+      summary: Verify an SDK payment result with the provider
+      description: |
+        The body `payload` is the provider's client-side result (e.g. Razorpay order/payment ids + signature).
+        The server MUST verify the signature / fetch the payment from the provider API and only then update the order.
+        Never trust the payload as proof of payment.
+      security: [{ csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyPaymentRequest' } } } }
+      responses:
+        '200': { description: Current payment state, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /me/orders:
+    get:
+      tags: [Orders & payments]
+      operationId: listMyOrders
+      security: [{ customerSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200': { description: Orders, content: { application/json: { schema: { $ref: '#/components/schemas/OrderList' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /auth/otp/request:
+    post:
+      tags: [Customer auth]
+      operationId: requestOtp
+      summary: Send an SMS OTP (rate-limit per phone + IP, captcha recommended)
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OtpRequest' } } } }
+      responses:
+        '200': { description: Code sent, content: { application/json: { schema: { $ref: '#/components/schemas/OtpRequestResponse' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/otp/verify:
+    post:
+      tags: [Customer auth]
+      operationId: verifyOtp
+      summary: Verify the OTP and start a session (sets the customer session cookie)
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OtpVerifyRequest' } } } }
+      responses:
+        '200': { description: Signed in, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      tags: [Customer auth]
+      operationId: logout
+      security: [{ csrf: [] }]
+      responses:
+        '204': { description: Signed out (cookie cleared) }
+  /me:
+    get:
+      tags: [Customer auth]
+      operationId: getMe
+      security: [{ customerSession: [] }]
+      responses:
+        '200': { description: Customer, content: { application/json: { schema: { $ref: '#/components/schemas/Customer' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /newsletter/subscriptions:
+    post:
+      tags: [Marketing]
+      operationId: subscribeNewsletter
+      summary: Subscribe (double opt-in recommended; store the consent record)
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NewsletterRequest' } } } }
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/NewsletterResponse' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+  /leads:
+    post:
+      tags: [Marketing]
+      operationId: createLead
+      summary: Bulk / custom-order enquiry (rate-limit; notify the sales inbox)
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LeadRequest' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } } }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /admin/auth/login:
+    post:
+      tags: [Admin]
+      operationId: adminLogin
+      summary: Admin sign-in (argon2/bcrypt hashes, lockout, rate limits)
+      description: "On success sets the admin session cookie (name = `ADMIN_SESSION_COOKIE`, default `o218_admin_session`). When MFA is enabled returns `mfaRequired: true` and an unprivileged partial session."
+      security: [{ csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLoginRequest' } } } }
+      responses:
+        '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLoginResponse' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /admin/auth/mfa:
+    post:
+      tags: [Admin]
+      operationId: adminVerifyMfa
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminMfaRequest' } } } }
+      responses:
+        '200': { description: Fully authenticated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminMe' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /admin/auth/logout:
+    post:
+      tags: [Admin]
+      operationId: adminLogout
+      security: [{ adminSession: [], csrf: [] }]
+      responses:
+        '204': { description: Session destroyed server-side and cookie cleared }
+  /admin/auth/me:
+    get:
+      tags: [Admin]
+      operationId: adminMe
+      summary: Validate the admin session (called by the server-side admin guard on every /admin request)
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Admin, content: { application/json: { schema: { $ref: '#/components/schemas/AdminMe' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /admin/dashboard/summary:
+    get:
+      tags: [Admin]
+      operationId: adminDashboardSummary
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Real aggregates (no fabricated numbers), content: { application/json: { schema: { $ref: '#/components/schemas/DashboardSummary' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /admin/products:
+    get:
+      tags: [Admin]
+      operationId: adminListProducts
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200': { description: Products incl. drafts and exact stock, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProductList' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Admin]
+      operationId: adminCreateProduct
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProductInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /admin/products/bulk-flags:
+    post:
+      tags: [Admin]
+      operationId: adminBulkFlags
+      summary: Set a merchandising flag on every product (e.g. clear Luxe)
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BulkFlagRequest' } } } }
+      responses:
+        '204': { description: Updated }
+  /admin/products/{id}:
+    put:
+      tags: [Admin]
+      operationId: adminUpdateProduct
+      description: "Changing a slug must create a redirect from the old URL. Notify the frontend cache (`POST /api/revalidate`)."
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProductInput' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteProduct
+      description: "Refuse (409 `product_has_orders`) when the product appears in any order — set it to `draft` instead."
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /admin/categories:
+    get:
+      tags: [Admin]
+      operationId: adminListCategories
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: All categories, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Category' } } } } } } }
+  /admin/categories/{id}:
+    put:
+      tags: [Admin]
+      operationId: adminUpdateCategory
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminCategoryUpdate' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /admin/orders:
+    get:
+      tags: [Admin]
+      operationId: adminListOrders
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200': { description: Orders, content: { application/json: { schema: { $ref: '#/components/schemas/OrderList' } } } }
+  /admin/orders/export.csv:
+    get:
+      tags: [Admin]
+      operationId: adminExportOrders
+      description: CSV download. Neutralise spreadsheet formula injection (prefix cells starting with = + - @ with an apostrophe).
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+  /admin/orders/{id}/status:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateOrderStatus
+      description: "Validate transitions (e.g. no `delivered` → `processing`). Cancelling must release reserved stock. Payment status is NOT editable here."
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateOrderStatusRequest' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /admin/reviews:
+    get:
+      tags: [Admin]
+      operationId: adminListReviews
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200': { description: Reviews, content: { application/json: { schema: { $ref: '#/components/schemas/AdminReviewList' } } } }
+  /admin/reviews/{id}:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateReview
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateReviewStatusRequest' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminReview' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /admin/leads:
+    get:
+      tags: [Admin]
+      operationId: adminListLeads
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        '200': { description: Leads, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLeadList' } } } }
+  /admin/leads/export.csv:
+    get:
+      tags: [Admin]
+      operationId: adminExportLeads
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+  /admin/leads/{id}:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateLead
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateLeadStatusRequest' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLead' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /admin/content:
+    get:
+      tags: [Admin]
+      operationId: adminGetContent
+      summary: Settings and ALL hero slides (including hidden)
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Content, content: { application/json: { schema: { $ref: '#/components/schemas/AdminContent' } } } }
+  /admin/content/settings:
+    put:
+      tags: [Admin]
+      operationId: adminUpdateSettings
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreSettings' } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/StoreSettings' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+  /admin/content/hero-slides/{id}:
+    put:
+      tags: [Admin]
+      operationId: adminUpdateHeroSlide
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlideInput' } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlide' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+webhooks:
+  paymentProviderEvent:
+    post:
+      summary: Payment provider → backend (NOT called by the frontend)
+      description: |
+        Verify the provider signature on the raw body, de-duplicate by event id, then move the order/payment state
+        (`pending` → `paid`/`failed`, refunds). This is the source of truth for payment status. After a catalogue,
+        content or stock change, call the frontend's `POST /api/revalidate` (see docs/BACKEND_INTEGRATION.md).
+      responses:
+        '200': { description: Acknowledged }
+
+components:
+  securitySchemes:
+    customerSession: { type: apiKey, in: cookie, name: o218_session, description: Customer session cookie set by /auth/otp/verify (name is backend-defined). }
+    adminSession: { type: apiKey, in: cookie, name: o218_admin_session, description: 'Admin session cookie. The frontend gate reads the name from the ADMIN_SESSION_COOKIE env var.' }
+    csrf: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Slug: { name: slug, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]+$' } }
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+  responses:
+    Error:
+      description: "Error envelope. `code` is machine-readable (e.g. validation_failed, unauthorized, forbidden, not_found, conflict, rate_limited, csrf_invalid, out_of_stock, coupon_invalid)."
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+  schemas:
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string, description: Safe to display to shoppers }
+            fieldErrors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+            requestId: { type: string }
+    SafeUrl:
+      type: string
+      description: "Site-relative path or https URL only. `javascript:`, `data:` and protocol-relative URLs are rejected by the frontend."
+      pattern: '^(/(?!/)|https://)\S+$'
+    Availability:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [in_stock, low_stock, out_of_stock] }
+        quantity: { type: integer, minimum: 0, description: Only when low_stock }
+    Variant:
+      type: object
+      required: [id, sku, size, availability]
+      properties:
+        id: { type: string }
+        sku: { type: string }
+        size: { type: string }
+        availability: { $ref: '#/components/schemas/Availability' }
+    Product:
+      type: object
+      required: [id, slug, name, category, categorySlug, price, compareAt, color, colorHex, rating, reviewCount, images, fit, material, description, bestSeller, newArrival, luxe, variants, updatedAt]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        category: { type: string, description: Display name }
+        categorySlug: { type: string, description: Stable slug }
+        price: { type: number, minimum: 0 }
+        compareAt: { type: number, minimum: 0, description: 0 or <= price means none }
+        color: { type: string }
+        colorHex: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        rating: { type: number, minimum: 0, maximum: 5, description: Average of published reviews (0 when none) }
+        reviewCount: { type: integer, minimum: 0 }
+        badge: { type: [string, 'null'] }
+        images: { type: array, minItems: 1, maxItems: 12, items: { $ref: '#/components/schemas/SafeUrl' } }
+        fit: { type: string }
+        material: { type: string }
+        description: "{ type: string }"
+        bestSeller: { type: boolean }
+        newArrival: { type: boolean }
+        luxe: { type: boolean }
+        variants: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Variant' } }
+        updatedAt: { type: string, format: date-time }
+    ProductList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Product' } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    Category:
+      type: object
+      required: [id, name, slug, image, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        image: { $ref: '#/components/schemas/SafeUrl' }
+        active: { type: boolean }
+    Collection:
+      type: object
+      required: [slug, title, description]
+      properties: { slug: { type: string }, title: { type: string }, description: { type: string } }
+    InventoryAvailability:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [variantId, sku, availability]
+            properties: { variantId: { type: string }, sku: { type: string }, availability: { $ref: '#/components/schemas/Availability' } }
+    Serviceability:
+      type: object
+      required: [pincode, serviceable, codAvailable, estimatedDays]
+      properties:
+        pincode: { type: string }
+        serviceable: { type: boolean }
+        codAvailable: { type: boolean }
+        estimatedDays: { type: [object, 'null'], required: [min, max], properties: { min: { type: integer, minimum: 1 }, max: { type: integer, minimum: 1 } } }
+        message: { type: [string, 'null'] }
+    StoreSettings:
+      type: object
+      required: [brandName, brandLine, promoText, announcementEnabled, freeShippingThreshold, returnPolicy, seoTitle, seoDescription, contactEmail, contactPhone]
+      properties:
+        brandName: { type: string, maxLength: 80 }
+        brandLine: { type: string, maxLength: 160 }
+        promoText: { type: string, maxLength: 400 }
+        announcementEnabled: { type: boolean }
+        freeShippingThreshold: { type: number, minimum: 0 }
+        returnPolicy: { type: string, maxLength: 2000 }
+        seoTitle: { type: string, maxLength: 120 }
+        seoDescription: { type: string, maxLength: 320 }
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string }
+        instagramUrl: { type: [string, 'null'], description: https URL }
+        whatsappNumber: { type: [string, 'null'], pattern: '^[0-9]{10,15}$' }
+        productOfferCode: { type: [string, 'null'], description: Coupon code advertised on product pages — must exist as a coupon }
+        productOfferText: { type: [string, 'null'] }
+    HeroSlide:
+      allOf:
+        - $ref: '#/components/schemas/HeroSlideInput'
+        - type: object
+          required: [id]
+          properties: { id: { type: string } }
+    HeroSlideInput:
+      type: object
+      required: [kicker, title, body, desktopImage, mobileImage, cta, href, active]
+      properties:
+        kicker: { type: string }
+        title: { type: string }
+        body: { type: string }
+        desktopImage: { $ref: '#/components/schemas/SafeUrl' }
+        mobileImage: { $ref: '#/components/schemas/SafeUrl' }
+        cta: { type: string }
+        href: { type: string, pattern: '^/(?!/)\S*$', description: Site-relative path }
+        active: { type: boolean }
+    StorefrontContent:
+      type: object
+      required: [settings, heroSlides, categories]
+      properties:
+        settings: { $ref: '#/components/schemas/StoreSettings' }
+        heroSlides: { type: array, items: { $ref: '#/components/schemas/HeroSlide' }, description: Active slides only }
+        categories: { type: array, items: { $ref: '#/components/schemas/Category' }, description: Active categories only }
+    LegalPage:
+      type: object
+      required: [slug, title, body, updatedAt]
+      properties: { slug: { type: string }, title: { type: string }, body: { type: string }, updatedAt: { type: string, format: date-time } }
+    Review:
+      type: object
+      required: [id, author, rating, title, body, createdAt, verifiedPurchase]
+      properties:
+        id: { type: string }
+        author: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        title: { type: string }
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+        verifiedPurchase: { type: boolean }
+    ReviewList:
+      type: object
+      required: [summary, items]
+      properties:
+        summary:
+          type: object
+          required: [average, count, distribution]
+          properties:
+            average: { type: number, minimum: 0, maximum: 5 }
+            count: { type: integer, minimum: 0 }
+            distribution:
+              type: object
+              required: ['1', '2', '3', '4', '5']
+              properties: { '1': { type: integer }, '2': { type: integer }, '3': { type: integer }, '4': { type: integer }, '5': { type: integer } }
+        items: { type: array, items: { $ref: '#/components/schemas/Review' } }
+    CreateReviewRequest:
+      type: object
+      required: [rating, title, body, authorName]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        title: { type: string, minLength: 1, maxLength: 100 }
+        body: { type: string, minLength: 8, maxLength: 1200 }
+        authorName: { type: string, minLength: 1, maxLength: 70 }
+    CreateReviewResponse:
+      type: object
+      required: [id, status]
+      properties: { id: { type: string }, status: { type: string, enum: [pending, published] }, message: { type: [string, 'null'] } }
+    Customer:
+      type: object
+      required: [id, phone]
+      properties: { id: { type: string }, phone: { type: string, pattern: '^[6-9][0-9]{9}$' }, name: { type: [string, 'null'] }, email: { type: [string, 'null'] } }
+    OtpRequest:
+      type: object
+      required: [phone]
+      properties: { phone: { type: string, pattern: '^[6-9][0-9]{9}$' } }
+    OtpRequestResponse:
+      type: object
+      required: [requestId, expiresInSeconds, resendAfterSeconds]
+      properties: { requestId: { type: string }, expiresInSeconds: { type: integer }, resendAfterSeconds: { type: integer } }
+    OtpVerifyRequest:
+      type: object
+      required: [requestId, phone, otp]
+      properties: { requestId: { type: string }, phone: { type: string }, otp: { type: string, pattern: '^[0-9]{6}$' } }
+    Session:
+      type: object
+      required: [customer]
+      properties: { customer: { $ref: '#/components/schemas/Customer' } }
+    CartLine:
+      type: object
+      required: [id, variantId, productId, slug, name, image, color, size, quantity, unitPrice, compareAt, lineTotal, maxQuantity]
+      properties:
+        id: { type: string }
+        variantId: { type: string }
+        productId: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        image: { $ref: '#/components/schemas/SafeUrl' }
+        color: { type: string }
+        size: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        unitPrice: { type: number }
+        compareAt: { type: number }
+        lineTotal: { type: number }
+        maxQuantity: { type: integer, description: Cap for this line (availability and purchase limit) }
+        issue: { type: [string, 'null'], enum: [out_of_stock, quantity_reduced, price_changed, null] }
+    Totals:
+      type: object
+      required: [subtotal, discount, shipping, total]
+      properties: { subtotal: { type: number }, discount: { type: number }, shipping: { type: number }, total: { type: number } }
+    Cart:
+      type: object
+      required: [id, currency, lines, coupon, totals, freeShippingThreshold, messages]
+      properties:
+        id: { type: string }
+        currency: { const: INR }
+        lines: { type: array, items: { $ref: '#/components/schemas/CartLine' } }
+        coupon: { type: [object, 'null'], required: [code], properties: { code: { type: string }, description: { type: [string, 'null'] } } }
+        totals: { $ref: '#/components/schemas/Totals' }
+        freeShippingThreshold: { type: [number, 'null'] }
+        messages: { type: array, items: { type: string } }
+    AddCartItemRequest:
+      type: object
+      required: [variantId, quantity]
+      properties: { variantId: { type: string }, quantity: { type: integer, minimum: 1, maximum: 20 } }
+    UpdateCartItemRequest:
+      type: object
+      required: [quantity]
+      properties: { quantity: { type: integer, minimum: 0, maximum: 20 } }
+    ApplyCouponRequest:
+      type: object
+      required: [code]
+      properties: { code: { type: string, minLength: 1, maxLength: 40 } }
+    Address:
+      type: object
+      required: [line1, city, state, pincode]
+      properties:
+        line1: { type: string, minLength: 3, maxLength: 200 }
+        line2: { type: [string, 'null'] }
+        city: { type: string }
+        state: { type: string }
+        pincode: { type: string, pattern: '^[1-9][0-9]{5}$' }
+    Contact:
+      type: object
+      required: [name, phone, email]
+      properties: { name: { type: string, minLength: 2 }, phone: { type: string, pattern: '^[6-9][0-9]{9}$' }, email: { type: string, format: email } }
+    CreateOrderRequest:
+      type: object
+      required: [contact, shippingAddress, paymentMethod, acceptedTerms]
+      description: No amounts, prices or discounts are accepted — the server prices the cart.
+      properties:
+        contact: { $ref: '#/components/schemas/Contact' }
+        shippingAddress: { $ref: '#/components/schemas/Address' }
+        paymentMethod: { type: string, enum: [upi, card, cod] }
+        acceptedTerms: { const: true }
+    OrderLine:
+      type: object
+      required: [productId, variantId, name, image, size, color, quantity, unitPrice, lineTotal]
+      properties:
+        productId: { type: string }
+        variantId: { type: string }
+        name: { type: string }
+        image: { $ref: '#/components/schemas/SafeUrl' }
+        size: { type: string }
+        color: { type: string }
+        quantity: { type: integer }
+        unitPrice: { type: number }
+        lineTotal: { type: number }
+    Order:
+      type: object
+      required: [id, number, status, paymentStatus, paymentMethod, currency, totals, lines, contact, shippingAddress, createdAt]
+      properties:
+        id: { type: string }
+        number: { type: string, description: Human-friendly, sequential, never random }
+        status: { type: string, enum: [pending_payment, confirmed, processing, packed, shipped, delivered, cancelled, refunded] }
+        paymentStatus: { type: string, enum: [unpaid, pending, paid, failed, cod_pending, refunded], description: Set ONLY from verified provider events (or cod_pending for COD). }
+        paymentMethod: { type: string, enum: [upi, card, cod] }
+        currency: { const: INR }
+        totals: { $ref: '#/components/schemas/Totals' }
+        lines: { type: array, items: { $ref: '#/components/schemas/OrderLine' } }
+        contact: { $ref: '#/components/schemas/Contact' }
+        shippingAddress: { $ref: '#/components/schemas/Address' }
+        createdAt: { type: string, format: date-time }
+    OrderList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Order' } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    PaymentAction:
+      oneOf:
+        - type: object
+          required: [type, url]
+          properties: { type: { const: redirect }, url: { type: string, pattern: '^https://\S+$' } }
+        - type: object
+          required: [type, provider, payload]
+          properties: { type: { const: sdk }, provider: { type: string }, payload: { type: object, additionalProperties: true } }
+    Payment:
+      type: object
+      required: [id, provider, status, action]
+      properties:
+        id: { type: string }
+        provider: { type: string }
+        status: { type: string, enum: [unpaid, pending, paid, failed, cod_pending, refunded] }
+        action: { oneOf: [{ $ref: '#/components/schemas/PaymentAction' }, { type: 'null' }] }
+    CreateOrderResponse:
+      type: object
+      required: [order, payment, lookupToken]
+      properties:
+        order: { $ref: '#/components/schemas/Order' }
+        payment: { $ref: '#/components/schemas/Payment' }
+        lookupToken: { type: string, minLength: 16, description: Unguessable (>= 128 bits), scoped to this order }
+    VerifyPaymentRequest:
+      type: object
+      required: [payload]
+      properties: { payload: { type: object, additionalProperties: true } }
+    NewsletterRequest:
+      type: object
+      required: [email, consent]
+      properties: { email: { type: string, format: email }, consent: { const: true } }
+    NewsletterResponse:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [pending_confirmation, subscribed] } }
+    LeadRequest:
+      type: object
+      required: [name, email, phone, type, quantity, message]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        type: { type: string }
+        quantity: { type: string }
+        message: { type: string, maxLength: 2000 }
+    AdminUser:
+      type: object
+      required: [id, email, name, role]
+      properties: { id: { type: string }, email: { type: string }, name: { type: string }, role: { type: string, enum: [owner, manager, content, support] } }
+    AdminLoginRequest:
+      type: object
+      required: [email, password]
+      properties: { email: { type: string, format: email }, password: { type: string, maxLength: 256 } }
+    AdminLoginResponse:
+      type: object
+      required: [mfaRequired, admin]
+      properties: { mfaRequired: { type: boolean }, admin: { oneOf: [{ $ref: '#/components/schemas/AdminUser' }, { type: 'null' }] } }
+    AdminMfaRequest:
+      type: object
+      required: [code]
+      properties: { code: { type: string, pattern: '^[0-9]{6}$' } }
+    AdminMe:
+      type: object
+      required: [admin]
+      properties: { admin: { $ref: '#/components/schemas/AdminUser' } }
+    AdminVariant:
+      allOf:
+        - $ref: '#/components/schemas/Variant'
+        - type: object
+          required: [stock]
+          properties: { stock: { type: integer, minimum: 0 } }
+    AdminProduct:
+      allOf:
+        - $ref: '#/components/schemas/Product'
+        - type: object
+          required: [categoryId, status, variants]
+          properties:
+            categoryId: { type: string }
+            status: { type: string, enum: [active, draft] }
+            variants: { type: array, items: { $ref: '#/components/schemas/AdminVariant' } }
+    AdminProductList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminProduct' } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    AdminProductInput:
+      type: object
+      required: [name, slug, categoryId, price, compareAt, color, colorHex, images, fit, material, description, bestSeller, newArrival, luxe, status, variants]
+      properties:
+        name: { type: string }
+        slug: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+        categoryId: { type: string }
+        price: { type: number, minimum: 0 }
+        compareAt: { type: number, minimum: 0 }
+        color: { type: string }
+        colorHex: { type: string }
+        badge: { type: [string, 'null'] }
+        images: { type: array, minItems: 1, items: { $ref: '#/components/schemas/SafeUrl' } }
+        fit: { type: string }
+        material: { type: string }
+        description: "{ type: string }"
+        bestSeller: { type: boolean }
+        newArrival: { type: boolean }
+        luxe: { type: boolean }
+        status: { type: string, enum: [active, draft] }
+        variants:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [size, stock]
+            properties: { size: { type: string }, sku: { type: [string, 'null'] }, stock: { type: integer, minimum: 0 } }
+    AdminCategoryUpdate:
+      type: object
+      required: [name, image, active]
+      properties: { name: { type: string }, image: { $ref: '#/components/schemas/SafeUrl' }, active: { type: boolean } }
+    BulkFlagRequest:
+      type: object
+      required: [flag, value]
+      properties: { flag: { type: string, enum: [luxe, bestSeller, newArrival] }, value: { type: boolean } }
+    UpdateOrderStatusRequest:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [pending_payment, confirmed, processing, packed, shipped, delivered, cancelled, refunded] } }
+    AdminReview:
+      type: object
+      required: [id, productId, productName, author, rating, title, body, status, createdAt, verifiedPurchase]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        productName: { type: string }
+        author: { type: string }
+        rating: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        status: { type: string, enum: [pending, published, hidden] }
+        createdAt: { type: string, format: date-time }
+        verifiedPurchase: { type: boolean }
+    AdminReviewList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminReview' } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    UpdateReviewStatusRequest:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [pending, published, hidden] } }
+    AdminLead:
+      allOf:
+        - $ref: '#/components/schemas/LeadRequest'
+        - type: object
+          required: [id, status, createdAt]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [new, contacted, qualified, closed] }
+            createdAt: { type: string, format: date-time }
+    AdminLeadList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminLead' } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    UpdateLeadStatusRequest:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [new, contacted, qualified, closed] } }
+    AdminContent:
+      type: object
+      required: [settings, heroSlides]
+      properties:
+        settings: { $ref: '#/components/schemas/StoreSettings' }
+        heroSlides: { type: array, items: { $ref: '#/components/schemas/HeroSlide' } }
+    DashboardSummary:
+      type: object
+      required: [orderCount, grossRevenue, productCount, lowStockCount, newArrivalCount, newLeadCount, pendingReviewCount, orderCountDeltaPercent, revenueDeltaPercent, revenueSeries, recentOrders]
+      properties:
+        orderCount: { type: integer }
+        grossRevenue: { type: number }
+        productCount: { type: integer }
+        lowStockCount: { type: integer }
+        newArrivalCount: { type: integer }
+        newLeadCount: { type: integer }
+        pendingReviewCount: { type: integer }
+        orderCountDeltaPercent: { type: [number, 'null'], description: null when unknown — never invent a value }
+        revenueDeltaPercent: { type: [number, 'null'] }
+        revenueSeries:
+          type: array
+          items: { type: object, required: [date, amount], properties: { date: { type: string }, amount: { type: number } } }
+        recentOrders: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Order' } }

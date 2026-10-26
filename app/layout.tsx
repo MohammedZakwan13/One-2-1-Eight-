@@ -1,37 +1,31 @@
 import type { Metadata, Viewport } from 'next';
+import { DM_Sans, Manrope } from 'next/font/google';
 import './globals.css';
-import { StoreProvider } from '@/components/store-context';
+import { AppProviders } from '@/components/providers/app-providers';
+import { getServerEnv } from '@/lib/env';
+import { BRAND_NAME } from '@/lib/site';
+
+const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-dm-sans', display: 'swap' });
+const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], variable: '--font-manrope', display: 'swap' });
+
+// Fails fast on unsafe configuration (mock mode in production, placeholder domain, missing API URL…).
+const env = getServerEnv();
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://one2oneight.example'),
-  title: 'ONE 2 1 EIGHT — Elevated everyday menswear',
-  description: 'Discover premium everyday menswear with elevated fits, refined textures and considered detail. Shop T-shirts, drop shoulders, sweatshirts, hoodies, polos, track pants and joggers.',
-  applicationName: 'ONE 2 1 EIGHT',
-  keywords: ['premium menswear', 'oversized t-shirts', 'drop shoulder t-shirts', 'premium hoodies', 'menswear India', 'luxe streetwear'],
-  alternates: { canonical: '/' },
-  openGraph: {
-    type: 'website', title: 'ONE 2 1 EIGHT — Elevated everyday menswear',
-    description: 'Wear your own standard. Explore elevated everyday essentials and the Luxe edit.',
-    siteName: 'ONE 2 1 EIGHT', url: 'https://one2oneight.example',
-  },
-  twitter: { card: 'summary_large_image', title: 'ONE 2 1 EIGHT', description: 'Elevated everyday menswear.' },
-  robots: { index: true, follow: true },
+  metadataBase: new URL(env.siteUrl),
+  title: { default: BRAND_NAME, template: `%s | ${BRAND_NAME}` },
+  applicationName: BRAND_NAME,
+  // Staging and development must never be indexed.
+  robots: env.isProduction ? { index: true, follow: true } : { index: false, follow: false },
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#080808' };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const organizationSchema = {
-    '@context': 'https://schema.org', '@type': 'Organization', name: 'ONE 2 1 EIGHT', url: 'https://one2oneight.example',
-    description: 'Premium everyday menswear with elevated fits and refined detail.', email: 'care@one2oneight.example',
-  };
-  const websiteSchema = { '@context': 'https://schema.org', '@type': 'WebSite', name: 'ONE 2 1 EIGHT', url: 'https://one2oneight.example', potentialAction: { '@type': 'SearchAction', target: 'https://one2oneight.example/search?q={search_term_string}', 'query-input': 'required name=search_term_string' } };
   return (
-    <html lang="en-IN">
+    <html lang="en-IN" className={`${dmSans.variable} ${manrope.variable}`}>
       <body>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }} />
-        <StoreProvider>{children}</StoreProvider>
+        <AppProviders runtime={{ mock: env.mockEnabled }}>{children}</AppProviders>
       </body>
     </html>
   );

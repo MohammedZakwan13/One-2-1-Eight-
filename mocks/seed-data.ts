@@ -1,55 +1,9 @@
-export type Product = {
-  id: string;
-  slug: string;
-  name: string;
-  category: string;
-  price: number;
-  compareAt: number;
-  color: string;
-  colorHex: string;
-  sizes: string[];
-  rating: number;
-  reviewCount: number;
-  badge?: string;
-  images: string[];
-  fit: string;
-  material: string;
-  description: string;
-  stock: number;
-  bestSeller: boolean;
-  newArrival: boolean;
-  luxe: boolean;
-};
-
-export type HeroSlide = {
-  id: string;
-  kicker: string;
-  title: string;
-  body: string;
-  desktopImage: string;
-  mobileImage: string;
-  cta: string;
-  href: string;
-  active: boolean;
-};
-
-export type Category = { id: string; name: string; image: string; slug: string; active: boolean };
-
-export type StoreSettings = {
-  brandName: string;
-  brandLine: string;
-  promoText: string;
-  announcementEnabled: boolean;
-  freeShippingThreshold: number;
-  returnPolicy: string;
-  seoTitle: string;
-  seoDescription: string;
-  contactEmail: string;
-  contactPhone: string;
-};
-
+/**
+ * Development / test seed data ONLY. Imported exclusively by the mock API (mocks/*).
+ * Never import this from application code – production data comes from the backend.
+ */
 // Seeded imagery is kept locally in /public/images so galleries stay consistent and load deterministically.
-export const INITIAL_PRODUCTS: Product[] = [
+export const SEED_PRODUCTS = [
   {
     id: 'p1', slug: 'essential-box-fit-tee-black', name: 'Essential Box Fit T-Shirt', category: 'T-Shirt', price: 899, compareAt: 1199,
     color: 'Washed Black', colorHex: '#252525', sizes: ['S','M','L','XL','XXL'], rating: 4.8, reviewCount: 126, badge: 'BESTSELLER',
@@ -124,7 +78,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
 ];
 
-export const INITIAL_HERO: HeroSlide[] = [
+export const SEED_HERO = [
   {
     id: 'hero-1', kicker: 'THE NEW UNIFORM', title: 'ELEVATED ESSENTIALS', body: 'A better standard for everyday menswear.', desktopImage: '/images/campaign/menswear-editorial-wide.webp', mobileImage: '/images/campaign/menswear-mobile.webp', cta: '', href: '/collections/all', active: true,
   },
@@ -136,7 +90,7 @@ export const INITIAL_HERO: HeroSlide[] = [
   },
 ];
 
-export const INITIAL_CATEGORIES: Category[] = [
+export const SEED_CATEGORIES = [
   { id: 'cat-1', name: 'T-Shirt', slug: 't-shirt', image: '/images/products/black-tee-front.webp', active: true },
   { id: 'cat-2', name: 'Drop Shoulder', slug: 'drop-shoulder', image: '/images/products/ivory-tee-angle.webp', active: true },
   { id: 'cat-3', name: 'Sweatshirt', slug: 'sweatshirt', image: '/images/products/charcoal-sweatshirt-front.webp', active: true },
@@ -147,7 +101,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat-8', name: 'Joggers', slug: 'joggers', image: '/images/products/sand-jogger-front.webp', active: false },
 ];
 
-export const INITIAL_SETTINGS: StoreSettings = {
+export const SEED_SETTINGS = {
   brandName: 'ONE 2 1 EIGHT',
   brandLine: 'Wear your own standard.',
   promoText: 'COMPLIMENTARY SHIPPING OVER ₹1,499   •   7-DAY EASY RETURNS   •   USE WELCOME10 FOR 10% OFF YOUR FIRST ORDER',
@@ -160,14 +114,14 @@ export const INITIAL_SETTINGS: StoreSettings = {
   contactPhone: '+91 90000 12181',
 };
 
-export const INITIAL_ORDERS = [
+export const SEED_ORDERS = [
   { id: '1218-1042', customer: 'Arjun Nair', date: '2026-10-21', amount: 2698, status: 'Processing', items: 2 },
   { id: '1218-1041', customer: 'Kabir Shah', date: '2026-10-21', amount: 1799, status: 'Shipped', items: 1 },
   { id: '1218-1040', customer: 'Vihaan Mehta', date: '2026-10-20', amount: 3498, status: 'Delivered', items: 2 },
   { id: '1218-1039', customer: 'Ishaan Rao', date: '2026-10-20', amount: 899, status: 'Processing', items: 1 },
 ];
 
-export const INITIAL_REVIEWS = [
+export const SEED_REVIEWS = [
   { id: 'r1', product: 'Essential Box Fit T-Shirt', customer: 'Rahul S.', rating: 5, text: 'The weight and fit feel premium. Exactly the kind of tee I keep reaching for.', date: '18 Oct 2026', status: 'Published' },
   { id: 'r2', product: 'Elevated Knit Polo', customer: 'Nikhil P.', rating: 5, text: 'Beautiful texture and a great fit. Works just as well with jeans as with trousers.', date: '15 Oct 2026', status: 'Published' },
   { id: 'r3', product: 'Studio Drop Shoulder Tee', customer: 'Aditya R.', rating: 4, text: 'Very good quality and drape. I would love to see more colours.', date: '12 Oct 2026', status: 'Pending' },

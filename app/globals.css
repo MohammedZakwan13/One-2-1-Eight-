@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -17,8 +16,9 @@
   --burgundy: #801b2a;
   --burgundy-hover: #6c1623;
   --radius: 3px;
-  --font-body: 'DM Sans', Arial, sans-serif;
-  --font-display: 'Manrope', 'Arial', sans-serif;
+  /* Fonts are self-hosted via next/font (see app/layout.tsx) – same families as the approved design. */
+  --font-body: var(--font-dm-sans), 'DM Sans', Arial, sans-serif;
+  --font-display: var(--font-manrope), 'Manrope', 'Arial', sans-serif;
   --page-pad: clamp(20px, 5.4vw, 88px);
 }
 
@@ -11409,4 +11409,69 @@ button {
   .announcement-track {
     animation: none !important;
   }
+}
+/* ───────── Production-readiness additions (additive only; approved design is unchanged) ───────── */
+.dev-mock-banner {
+  position: fixed;
+  top: 6px;
+  left: 6px;
+  z-index: 2147483000;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: #fff3cd;
+  color: #5c4400;
+  border: 1px solid #e0b100;
+  font: 700 9px/1.2 var(--font-body);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: .92;
+}
+.size-options button:disabled,
+.size-options button.sold-out {
+  opacity: .38;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.field-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.form-error-banner {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  background: #fbf1ee;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.dev-note {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px dashed #e0b100;
+  border-radius: var(--radius);
+  background: #fffaf0;
+  color: #5c4400;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.loading-state,
+.error-state {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.error-state button { margin-top: 4px; }
+.cart-issue { color: var(--danger); font-size: 12px; margin-top: 4px; display: block; }
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }

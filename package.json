@@ -1,25 +1,49 @@
 {
-  "name": "one2oneight-luxe-commerce-prototype",
-  "version": "1.0.0",
+  "name": "one2oneight-storefront",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
+    "dev:mock": "cross-env APP_ENV=development API_MODE=mock next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "lint": "next lint"
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "@tanstack/react-query": "^5.104.5",
     "lucide-react": "^0.468.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.1.10",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.28",
     "tailwindcss": "^4.1.10",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.0.5",
+    "yaml": "^2.9.1"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "overrides": {
+    "postcss": "8.5.31"
   }
 }

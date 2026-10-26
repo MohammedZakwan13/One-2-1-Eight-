@@ -1,0 +1,19 @@
+# Local/self-hosted convenience. Values come from your shell or an untracked `.env` file – nothing secret lives here.
+#   NEXT_PUBLIC_SITE_URL=https://www.your-domain.tld API_BASE_URL=https://api.your-domain.tld/v1 docker compose up --build
+services:
+  web:
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-production}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
+        API_BASE_URL: ${API_BASE_URL:?set API_BASE_URL}
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      API_BASE_URL: ${API_BASE_URL}
+      ADMIN_SESSION_COOKIE: ${ADMIN_SESSION_COOKIE:-o218_admin_session}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

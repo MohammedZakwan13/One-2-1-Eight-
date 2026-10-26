@@ -5,13 +5,19 @@ node_modules/
 .next/
 out/
 build/
+*.tsbuildinfo
 
 # Vercel
 .vercel/
 
-# Environment secrets
+# Environment secrets (only the placeholder template is committed)
 .env*
 !.env.example
+
+# Test output
+playwright-report/
+test-results/
+coverage/
 
 # Debug logs
 npm-debug.log*
@@ -20,5 +26,6 @@ pnpm-debug.log*
 
 # Editor and operating system files
 .vscode/
+.idea/
 .DS_Store
 Thumbs.db
