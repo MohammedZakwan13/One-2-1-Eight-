@@ -8,7 +8,7 @@ import { BRAND_NAME } from '@/lib/site';
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-dm-sans', display: 'swap' });
 const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], variable: '--font-manrope', display: 'swap' });
 
-// Fails fast on unsafe configuration (mock mode in production, placeholder domain, missing API URL…).
+// Fails fast on unsafe configuration (placeholder domain, missing Supabase keys…).
 const env = getServerEnv();
 
 export const metadata: Metadata = {
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en-IN" className={`${dmSans.variable} ${manrope.variable}`}>
       <body>
-        <AppProviders runtime={{ mock: env.mockEnabled }}>{children}</AppProviders>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

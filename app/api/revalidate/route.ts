@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { revalidateTag } from 'next/cache';
+import { clearServerCache } from '@/lib/api/server-transport';
 import { z } from 'zod';
 import { getServerEnv } from '@/lib/env';
 
@@ -31,5 +32,6 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: { code: 'validation_failed', message: 'Provide { "tags": [...] }.' } }, { status: 422, headers });
 
   for (const tag of parsed.data.tags) revalidateTag(tag);
+  clearServerCache();
   return Response.json({ revalidated: parsed.data.tags }, { headers });
 }

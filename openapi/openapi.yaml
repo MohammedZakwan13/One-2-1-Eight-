@@ -2,17 +2,19 @@ openapi: 3.1.0
 info:
   title: ONE 2 1 EIGHT — Storefront & Admin REST API
   version: 1.0.0
-  summary: Contract the backend must implement for the Next.js storefront and admin console.
+  summary: Storefront, customer and Admin/CMS API, implemented on Next.js + Supabase (Postgres, Auth, Storage).
   description: |
-    This document is the **contract** between the frontend (`one2oneight-production`) and a backend that does
-    not exist yet. It is framework-neutral: implement it in any stack.
+    This is the contract AND the description of the implemented API (`lib/backend/*`). A contract test keeps the
+    route table and this document in step.
 
-    ## How the frontend calls it
-    * Browsers call the **same-origin proxy** `/api/v1/*`; the Next.js server forwards to `API_BASE_URL`.
-      Server Components call `API_BASE_URL` directly. `API_BASE_URL` already includes any version prefix, so
-      a frontend request to `/api/v1/products` arrives at your server as `GET {API_BASE_URL}/products`.
-    * Session cookies are set by the backend (`Set-Cookie`) and are passed through the proxy unchanged.
-      They MUST be `HttpOnly; Secure; SameSite=Lax; Path=/`.
+    ## How to call it
+    * Browsers and Swagger UI call the **same-origin** API at `/api/v1/*`. Server Components dispatch to the same
+      handlers in-process (no network hop).
+    * **Authentication** is cookie based. Customers: `POST /auth/otp/verify` sets `o218_session` (HttpOnly).
+      Admins: `POST /admin/auth/login` sets `o218_admin_session` (HttpOnly). In Swagger UI, run the login call once;
+      the browser keeps the cookie and every later "Try it out" is authenticated automatically.
+    * Writes need a CSRF token. Swagger UI adds `X-CSRF-Token` automatically (it calls `GET /csrf-token` first).
+      Other clients must call `GET /csrf-token` (it sets the `o218_csrf` cookie) and echo the token in `X-CSRF-Token`.
     * Responses are validated in the browser with Zod schemas mirroring `components/schemas` below
       (`lib/api/schemas.ts`). A response that violates the contract is treated as an error.
 
@@ -30,8 +32,8 @@ info:
   license:
     name: Proprietary
 servers:
-  - url: https://api.your-backend.invalid/v1
-    description: "Replace with the real backend base URL (this is what `API_BASE_URL` points to)."
+  - url: http://localhost:3000/api/v1
+    description: Local server (the running host replaces this in /api/v1/openapi.json)
 tags:
   - name: Platform
   - name: Catalogue
@@ -270,6 +272,39 @@ paths:
       responses:
         '200': { description: Order, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }
         '404': { $ref: '#/components/responses/Error' }
+  /orders/{id}/cancel:
+    post:
+      tags: [Orders & payments]
+      operationId: cancelOrder
+      summary: Cancel an order before it ships
+      description: "Same access rule as `getOrder` (`token` query for guests, or the owning customer). Allowed only while the order is pending_payment, confirmed, processing or packed; 409 `not_cancellable` after shipping or delivery (use a return instead). Stock is restored exactly once; a paid online order gets a PENDING refund record (never marked refunded here). Repeating the call is harmless. Needs migration 0005 (503 `migration_required` otherwise)."
+      security: [{ csrf: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: token, in: query, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 3, maxLength: 300 } } } } } }
+      responses:
+        '200': { description: Cancelled order, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /orders/{id}/returns:
+    post:
+      tags: [Orders & payments]
+      operationId: requestReturn
+      summary: Request a return for delivered items
+      description: "Same access rule as `getOrder`. Enforced server-side: order delivered, inside the return window (`returnableUntil`), each item's purchase-time `returnable` snapshot is true, and quantity never exceeds bought minus already-requested. Requesting a return never restocks and never refunds."
+      security: [{ csrf: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: token, in: query, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateReturnRequest' } } } }
+      responses:
+        '201': { description: Return created, content: { application/json: { schema: { $ref: '#/components/schemas/Return' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /payments/{id}/verify:
     post:
       tags: [Orders & payments]
@@ -297,11 +332,19 @@ paths:
         '200': { description: Orders, content: { application/json: { schema: { $ref: '#/components/schemas/OrderList' } } } }
         '401': { $ref: '#/components/responses/Error' }
 
+  /auth/otp/config:
+    get:
+      tags: [Auth]
+      operationId: otpConfig
+      summary: Public MSG91 widget identifiers (widgetId, tokenAuth) the browser needs to draw the CAPTCHA; never includes the Authkey
+      responses:
+        '200': { description: Widget identifiers, content: { application/json: { schema: { $ref: '#/components/schemas/OtpConfig' } } } }
+        '503': { description: SMS sign-in not configured }
   /auth/otp/request:
     post:
       tags: [Customer auth]
       operationId: requestOtp
-      summary: Send an SMS OTP (rate-limit per phone + IP, captcha recommended)
+      summary: Start an OTP sign-in (rate limit per phone + IP); the code itself is sent by the MSG91 widget in the browser
       security: [{ csrf: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OtpRequest' } } } }
       responses:
@@ -312,7 +355,7 @@ paths:
     post:
       tags: [Customer auth]
       operationId: verifyOtp
-      summary: Verify the OTP and start a session (sets the customer session cookie)
+      summary: Verify the MSG91 widget access token server-side and start a session (sets the customer session cookie)
       security: [{ csrf: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OtpVerifyRequest' } } } }
       responses:
@@ -459,7 +502,29 @@ paths:
       security: [{ adminSession: [] }]
       responses:
         '200': { description: All categories, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Category' } } } } } } }
+    post:
+      tags: [Admin]
+      operationId: adminCreateCategory
+      summary: Create a category tile
+      description: "`slug` is optional (derived from the name). 409 `slug_taken` when the URL exists; 422 when it is reserved for a built-in collection. New categories are appended to the end of the tile order."
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminCategoryCreate' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Category' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /admin/categories/{id}:
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteCategory
+      summary: Delete a category (refused while products or banners still use it)
+      description: Never cascades. Returns 409 `category_in_use` when any product (including drafts) or homepage banner still points at the category; move them first.
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
     put:
       tags: [Admin]
       operationId: adminUpdateCategory
@@ -499,6 +564,27 @@ paths:
         '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+  /admin/returns:
+    get:
+      tags: [Admin]
+      operationId: adminListReturns
+      description: Return requests with order contact details. Empty until migration 0005 is applied.
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Returns, content: { application/json: { schema: { type: object, required: [items, total, page, pageSize], properties: { items: { type: array, items: { $ref: '#/components/schemas/Return' } }, total: { type: integer }, page: { type: integer }, pageSize: { type: integer } } } } } }
+  /admin/returns/{id}:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateReturn
+      description: "Graph: requested to approved|rejected, approved to received, received to refund_pending|completed, refund_pending to completed. Stock returns only at `received` with `restock: true`, once. `completed` requires `refundReference` when money is owed; the refund is only then recorded as completed."
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateReturnRequest' } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Return' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /admin/reviews:
     get:
       tags: [Admin]
@@ -574,14 +660,143 @@ paths:
         '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlide' } } } }
         '404': { $ref: '#/components/responses/Error' }
 
-webhooks:
-  paymentProviderEvent:
+  /ready:
+    get:
+      tags: [Platform]
+      operationId: getReady
+      summary: Readiness probe — also checks the database connection
+      responses:
+        '200': { description: Ready, content: { application/json: { schema: { type: object, required: [status], properties: { status: { const: ok }, database: { const: ok } } } } } }
+        '503': { description: Database unreachable }
+  /me/wishlist:
+    get:
+      tags: [Customer auth]
+      operationId: getWishlist
+      summary: Saved wishlist of the signed-in customer
+      security: [{ customerSession: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Wishlist' } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /me/wishlist/{productId}:
+    put:
+      tags: [Customer auth]
+      operationId: addToWishlist
+      summary: Save a product (idempotent)
+      security: [{ customerSession: [], csrf: [] }]
+      parameters: [{ name: productId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Saved }
+        '4XX': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Customer auth]
+      operationId: removeFromWishlist
+      summary: Remove a product
+      security: [{ customerSession: [], csrf: [] }]
+      parameters: [{ name: productId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Removed }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /me/addresses:
+    get:
+      tags: [Customer auth]
+      operationId: listAddresses
+      summary: Saved delivery addresses
+      security: [{ customerSession: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/SavedAddress' } } } } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
     post:
-      summary: Payment provider → backend (NOT called by the frontend)
-      description: |
-        Verify the provider signature on the raw body, de-duplicate by event id, then move the order/payment state
-        (`pending` → `paid`/`failed`, refunds). This is the source of truth for payment status. After a catalogue,
-        content or stock change, call the frontend's `POST /api/revalidate` (see docs/BACKEND_INTEGRATION.md).
+      tags: [Customer auth]
+      operationId: createAddress
+      summary: Save a delivery address (max 10)
+      security: [{ customerSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SavedAddressInput' } } } }
+      responses:
+        '201': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/SavedAddress' } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /me/addresses/{id}:
+    delete:
+      tags: [Customer auth]
+      operationId: deleteAddress
+      summary: Delete a saved address
+      security: [{ customerSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /admin/pages:
+    get:
+      tags: [Admin]
+      operationId: adminListPages
+      summary: Legal / policy pages (published and drafts)
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AdminPage' } } } } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /admin/pages/{slug}:
+    put:
+      tags: [Admin]
+      operationId: adminSavePage
+      summary: Create or update a page
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminPageInput' } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AdminPage' } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminDeletePage
+      summary: Delete a page
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      responses:
+        '204': { description: Deleted }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /admin/uploads:
+    post:
+      tags: [Admin]
+      operationId: adminUploadImage
+      summary: Upload one image to Supabase Storage
+      description: "multipart/form-data with a `file` field. JPEG, PNG, WebP or AVIF, max 4 MB (temporary: Vercel rejects request bodies above about 4.5 MB; larger files get 413 file_too_large). The type is verified from the file's bytes, not its name or declared MIME type. Returns the stable storage path and the public URL."
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
+      responses:
+        '201': { description: Stored, content: { application/json: { schema: { $ref: '#/components/schemas/UploadResponse' } } } }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '4XX': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteUpload
+      summary: Delete an uploaded image that is not referenced by any product, category or banner
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ name: path, in: query, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deleted }
+        '409': { $ref: '#/components/responses/Error' }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /admin/uploads/cleanup:
+    post:
+      tags: [Admin]
+      operationId: adminCleanupUploads
+      summary: Remove abandoned uploads (unreferenced and older than 24 hours)
+      security: [{ adminSession: [], csrf: [] }]
+      responses:
+        '200': { description: Result, content: { application/json: { schema: { type: object, required: [removed], properties: { removed: { type: integer } } } } } }
+        '4XX': { $ref: '#/components/responses/Error' }
+
+webhooks:
+  razorpayPaymentEvent:
+    post:
+      summary: Razorpay → server at /api/webhooks/razorpay (NOT called by the frontend)
+      description: Signature (X-Razorpay-Signature) is verified over the raw body; events are de-duplicated by X-Razorpay-Event-Id; payment.captured / order.paid settle the payment idempotently.
+      responses:
+        '200': { description: Acknowledged }
+  resendDeliveryEvent:
+    post:
+      summary: Resend → server at /api/webhooks/resend (delivery tracking only)
+      description: Svix signature and 5-minute timestamp window are verified; each svix-id is processed once. Updates email_log delivery status.
       responses:
         '200': { description: Acknowledged }
 
@@ -619,7 +834,6 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [in_stock, low_stock, out_of_stock] }
-        quantity: { type: integer, minimum: 0, description: Only when low_stock }
     Variant:
       type: object
       required: [id, sku, size, availability]
@@ -651,6 +865,8 @@ components:
         bestSeller: { type: boolean }
         newArrival: { type: boolean }
         luxe: { type: boolean }
+        returnable: { type: boolean, description: Whether the product can be returned after delivery }
+        stockMessage: { type: [string, 'null'], maxLength: 160, description: "Admin-written display text for the product page. Pure copy: never derived from, or used as, inventory." }
         variants: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Variant' } }
         updatedAt: { type: string, format: date-time }
     ProductList:
@@ -695,13 +911,15 @@ components:
         message: { type: [string, 'null'] }
     StoreSettings:
       type: object
-      required: [brandName, brandLine, promoText, announcementEnabled, freeShippingThreshold, returnPolicy, seoTitle, seoDescription, contactEmail, contactPhone]
+      required: [brandName, brandLine, promoText, announcementEnabled, freeShippingThreshold, shippingFee, lowStockThreshold, returnPolicy, seoTitle, seoDescription, contactEmail, contactPhone]
       properties:
         brandName: { type: string, maxLength: 80 }
         brandLine: { type: string, maxLength: 160 }
         promoText: { type: string, maxLength: 400 }
         announcementEnabled: { type: boolean }
         freeShippingThreshold: { type: number, minimum: 0 }
+        shippingFee: { type: number, minimum: 0, description: Flat fee below the free-shipping threshold }
+        lowStockThreshold: { type: integer, minimum: 0, maximum: 1000, description: A size at or below this REAL quantity is low stock }
         returnPolicy: { type: string, maxLength: 2000 }
         seoTitle: { type: string, maxLength: 120 }
         seoDescription: { type: string, maxLength: 320 }
@@ -731,8 +949,9 @@ components:
         active: { type: boolean }
     StorefrontContent:
       type: object
-      required: [settings, heroSlides, categories]
+      required: [settings, heroSlides, categories, paymentMethods]
       properties:
+        paymentMethods: { type: array, minItems: 1, items: { type: string, enum: [upi, card, cod] }, description: Online methods are listed only when a payment provider is configured }
         settings: { $ref: '#/components/schemas/StoreSettings' }
         heroSlides: { type: array, items: { $ref: '#/components/schemas/HeroSlide' }, description: Active slides only }
         categories: { type: array, items: { $ref: '#/components/schemas/Category' }, description: Active categories only }
@@ -782,18 +1001,24 @@ components:
       type: object
       required: [id, phone]
       properties: { id: { type: string }, phone: { type: string, pattern: '^[6-9][0-9]{9}$' }, name: { type: [string, 'null'] }, email: { type: [string, 'null'] } }
+    OtpConfig:
+      type: object
+      required: [widgetId, tokenAuth]
+      properties: { widgetId: { type: string }, tokenAuth: { type: string } }
     OtpRequest:
       type: object
       required: [phone]
       properties: { phone: { type: string, pattern: '^[6-9][0-9]{9}$' } }
     OtpRequestResponse:
       type: object
-      required: [requestId, expiresInSeconds, resendAfterSeconds]
-      properties: { requestId: { type: string }, expiresInSeconds: { type: integer }, resendAfterSeconds: { type: integer } }
+      required: [requestId, expiresInSeconds, resendAfterSeconds, widgetId, tokenAuth]
+      description: Permission to send/retry via the MSG91 OTP Widget (rate limited). widgetId and tokenAuth are the widget's public identifiers.
+      properties: { requestId: { type: string }, expiresInSeconds: { type: integer }, resendAfterSeconds: { type: integer }, widgetId: { type: string }, tokenAuth: { type: string } }
     OtpVerifyRequest:
       type: object
-      required: [requestId, phone, otp]
-      properties: { requestId: { type: string }, phone: { type: string }, otp: { type: string, pattern: '^[0-9]{6}$' } }
+      required: [requestId, phone, accessToken]
+      description: accessToken is the MSG91 widget's access token; the server verifies it with MSG91 (verifyAccessToken) before creating a session.
+      properties: { requestId: { type: string }, phone: { type: string }, accessToken: { type: string } }
     Session:
       type: object
       required: [customer]
@@ -880,8 +1105,13 @@ components:
         lineTotal: { type: number }
     Order:
       type: object
-      required: [id, number, status, paymentStatus, paymentMethod, currency, totals, lines, contact, shippingAddress, createdAt]
+      required: [id, number, status, paymentStatus, paymentMethod, currency, totals, lines, contact, shippingAddress, createdAt, history, shipment]
       properties:
+        history:
+          type: array
+          description: Customer-visible fulfilment timeline, oldest first
+          items: { type: object, required: [status, at], properties: { status: { type: string }, at: { type: string, format: date-time }, note: { type: [string, 'null'] } } }
+        shipment: { type: [object, 'null'], properties: { carrier: { type: [string, 'null'] }, trackingNumber: { type: [string, 'null'] }, trackingUrl: { type: [string, 'null'] } } }
         id: { type: string }
         number: { type: string, description: Human-friendly, sequential, never random }
         status: { type: string, enum: [pending_payment, confirmed, processing, packed, shipped, delivered, cancelled, refunded] }
@@ -893,6 +1123,46 @@ components:
         contact: { $ref: '#/components/schemas/Contact' }
         shippingAddress: { $ref: '#/components/schemas/Address' }
         createdAt: { type: string, format: date-time }
+        cancellable: { type: boolean, description: Server-decided; true only before shipping }
+        cancelReason: { type: [string, 'null'] }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        returnableUntil: { type: [string, 'null'], format: date-time, description: Delivery plus the store return window }
+        returns: { type: array, items: { $ref: '#/components/schemas/Return' } }
+        refund: { oneOf: [{ $ref: '#/components/schemas/Refund' }, { type: 'null' }], description: Cancellation refund (return refunds are on each return) }
+    Refund:
+      type: object
+      required: [amount, status, reference, method]
+      properties: { amount: { type: number }, status: { type: string, enum: [pending, completed, failed] }, reference: { type: [string, 'null'] }, method: { type: string, description: 'manual (COD or bank) or razorpay' } }
+    Return:
+      type: object
+      required: [id, number, orderId, orderNumber, status, reason, adminNote, createdAt, items, refund]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        orderId: { type: string }
+        orderNumber: { type: string }
+        status: { type: string, enum: [requested, approved, rejected, received, refund_pending, completed] }
+        reason: { type: string }
+        adminNote: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        restocked: { type: boolean }
+        items: { type: array, items: { type: object, required: [orderItemId, name, size, quantity], properties: { orderItemId: { type: string }, name: { type: string }, size: { type: string }, quantity: { type: integer } } } }
+        refund: { oneOf: [{ $ref: '#/components/schemas/Refund' }, { type: 'null' }] }
+        contact: { $ref: '#/components/schemas/Contact' }
+    CreateReturnRequest:
+      type: object
+      required: [reason, items]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        items: { type: array, minItems: 1, maxItems: 20, items: { type: object, required: [orderItemId, quantity], properties: { orderItemId: { type: string, description: OrderLine.id }, quantity: { type: integer, minimum: 1, maximum: 20 } } } }
+    UpdateReturnRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [approved, rejected, received, refund_pending, completed] }
+        note: { type: [string, 'null'], maxLength: 500 }
+        restock: { type: boolean, description: Only with status=received }
+        refundReference: { type: [string, 'null'], maxLength: 120, description: Required with status=completed when money is owed }
     OrderList:
       type: object
       required: [items, total, page, pageSize]
@@ -993,6 +1263,8 @@ components:
       type: object
       required: [name, slug, categoryId, price, compareAt, color, colorHex, images, fit, material, description, bestSeller, newArrival, luxe, status, variants]
       properties:
+        returnable: { type: boolean }
+        stockMessage: { type: [string, 'null'], maxLength: 160 }
         name: { type: string }
         slug: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
         categoryId: { type: string }
@@ -1016,6 +1288,38 @@ components:
             type: object
             required: [size, stock]
             properties: { size: { type: string }, sku: { type: [string, 'null'] }, stock: { type: integer, minimum: 0 } }
+    AdminPage:
+      type: object
+      required: [slug, title, body, published, updatedAt]
+      properties: { slug: { type: string, pattern: '^[a-z0-9-]{1,60}$' }, title: { type: string }, body: { type: string }, published: { type: boolean }, updatedAt: { type: string, format: date-time } }
+    AdminPageInput:
+      type: object
+      required: [title, body, published]
+      properties: { title: { type: string, minLength: 1, maxLength: 160 }, body: { type: string, maxLength: 100000 }, published: { type: boolean } }
+    UploadResponse:
+      type: object
+      required: [path, url]
+      properties: { path: { type: string, description: Stable Supabase Storage path }, url: { $ref: '#/components/schemas/SafeUrl' } }
+    Wishlist:
+      type: object
+      required: [productIds]
+      properties: { productIds: { type: array, items: { type: string } } }
+    SavedAddressInput:
+      allOf:
+        - $ref: '#/components/schemas/Address'
+        - type: object
+          required: [label, name, phone, isDefault]
+          properties: { label: { type: string }, name: { type: string }, phone: { type: string, pattern: '^[6-9][0-9]{9}$' }, isDefault: { type: boolean } }
+    SavedAddress:
+      allOf:
+        - $ref: '#/components/schemas/SavedAddressInput'
+        - type: object
+          required: [id]
+          properties: { id: { type: string } }
+    AdminCategoryCreate:
+      type: object
+      required: [name, image, active]
+      properties: { name: { type: string, maxLength: 80 }, slug: { type: string, maxLength: 60, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }, image: { $ref: '#/components/schemas/SafeUrl' }, active: { type: boolean } }
     AdminCategoryUpdate:
       type: object
       required: [name, image, active]
@@ -1027,7 +1331,12 @@ components:
     UpdateOrderStatusRequest:
       type: object
       required: [status]
-      properties: { status: { type: string, enum: [pending_payment, confirmed, processing, packed, shipped, delivered, cancelled, refunded] } }
+      properties:
+        status: { type: string, enum: [pending_payment, confirmed, processing, packed, shipped, delivered, cancelled, refunded] }
+        note: { type: [string, 'null'], maxLength: 500 }
+        carrier: { type: [string, 'null'], maxLength: 80, description: Used when status is shipped }
+        trackingNumber: { type: [string, 'null'], maxLength: 80 }
+        trackingUrl: { type: [string, 'null'], pattern: '^https://', maxLength: 500 }
     AdminReview:
       type: object
       required: [id, productId, productName, author, rating, title, body, status, createdAt, verifiedPurchase]
@@ -1083,12 +1392,13 @@ components:
         heroSlides: { type: array, items: { $ref: '#/components/schemas/HeroSlide' } }
     DashboardSummary:
       type: object
-      required: [orderCount, grossRevenue, productCount, lowStockCount, newArrivalCount, newLeadCount, pendingReviewCount, orderCountDeltaPercent, revenueDeltaPercent, revenueSeries, recentOrders]
+      required: [orderCount, grossRevenue, productCount, lowStockCount, newArrivalCount, newLeadCount, pendingReviewCount, lowStockItems, orderCountDeltaPercent, revenueDeltaPercent, revenueSeries, recentOrders]
       properties:
         orderCount: { type: integer }
         grossRevenue: { type: number }
         productCount: { type: integer }
-        lowStockCount: { type: integer }
+        lowStockCount: { type: integer, description: Sizes at or below the threshold, from REAL stock }
+        lowStockItems: { type: array, items: { type: object, required: [name, size, sku, stock], properties: { name: { type: string }, size: { type: string }, sku: { type: string }, stock: { type: integer } } } }
         newArrivalCount: { type: integer }
         newLeadCount: { type: integer }
         pendingReviewCount: { type: integer }

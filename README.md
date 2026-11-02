@@ -1,68 +1,46 @@
-# ONE 2 1 EIGHT — Storefront + Admin (production-preparation build)
+# ONE 2 1 EIGHT — storefront, Admin/CMS and API
 
-Next.js 15 · React 19 · TypeScript (strict) · Tailwind v4 · TanStack Query · Zod
+Next.js 15 (App Router, TypeScript) storefront + Admin/CMS, backed by **Supabase** (Postgres, Auth, Storage).
+There is no mock data in the running app: everything is read from and written to the database through the REST API.
 
-This is the production-preparation version of the client-approved prototype. The approved design,
-copy, imagery, splash, LUXE experience and interactions are preserved (verified by pixel comparison —
-see [`docs/BASELINE_AND_VERIFICATION.md`](docs/BASELINE_AND_VERIFICATION.md)). What changed is everything
-*behind* the UI: all data now flows through a typed API layer that a real backend plugs into.
+* API base path: `/api/v1` (same origin as the site) — documented in [`openapi/openapi.yaml`](openapi/openapi.yaml)
+* **Swagger UI: `/docs`** · OpenAPI JSON: `/api/v1/openapi.json` · health: `/api/health` · readiness: `/api/health?deep=1`
+* Full local setup, manual steps and test flow: [`docs/SETUP.md`](docs/SETUP.md) · [`docs/API_TESTING.md`](docs/API_TESTING.md)
 
-> **Status:** the frontend is integration-ready. It is **not** a live shop until a backend implementing
-> [`openapi/openapi.yaml`](openapi/openapi.yaml), a payment provider, SMS and shipping are connected.
-> See [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) for the exact list.
-
-## Quick start (local, no backend needed)
+## Quick start
 
 ```bash
-nvm use            # Node 22 (>= 20.9)
-npm ci
-cp .env.example .env.local
+npm install
+cp .env.example .env.local         # fill SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY
+npm run dev                        # http://localhost:3000   (Swagger: http://localhost:3000/docs)
 ```
 
-Edit `.env.local` for mock mode (choose your own local values — there are no built-in credentials):
-
-```ini
-APP_ENV=development
-API_MODE=mock
-MOCK_ADMIN_EMAIL=you@localhost.invalid
-MOCK_ADMIN_PASSWORD=pick-a-long-local-password
-MOCK_OTP_CODE=123456
-```
+Or in Docker (container on **3001**, so it can run next to `npm run dev`):
 
 ```bash
-npm run dev        # http://localhost:3000  (storefront)  ·  /admin  (CMS)
+docker compose up --build -d       # http://localhost:3001   (Swagger: http://localhost:3001/docs)
+docker compose down
 ```
-
-A yellow **DEV MOCK API** badge is always visible in mock mode. Mock mode is refused at start-up unless
-`APP_ENV` is `development` or `test`, so it can never silently serve fake data in staging/production.
 
 ## Scripts
 
-| Command | What it does |
-|---|---|
-| `npm run dev` / `npm run dev:mock` | Dev server (live API / forced mock) |
-| `npm run lint` | ESLint (zero warnings allowed) |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest unit/contract tests (env guards, HTTP layer, security rules, mock API flows, OpenAPI consistency) |
-| `npm run test:e2e` | Playwright journeys against a real production build + mock API (run `npm run test:e2e:install` once) |
-| `npm run build` / `npm start` | Production build / server |
-| `npm run check` | lint + typecheck + unit tests + build |
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run lint` · `typecheck` · `test` | ESLint · TypeScript · Vitest (env guards, HTTP layer, security rules, backend logic, OpenAPI ⇄ route-table contract) |
+| `npm run check` | lint + typecheck + test + build |
+| `npm run admin:create -- <email> "<name>" <role>` | Create an admin (needs `ADMIN_PASSWORD` env; see docs/SETUP.md) |
+| `npm run smoke` | End-to-end API smoke test against a running server and the real database |
 
-## Architecture in one picture
+## Layout
 
 ```
-Browser ──► /api/v1/*  (Next.js same-origin proxy, CSRF/Origin checks, no CORS, cookies stay first-party)
-   ▲                         │
-   │ React Query             ▼
-Client Components      BACKEND REST API  (openapi/openapi.yaml)   ◄── API_MODE=live
-                             ▲
-Server Components ───────────┘  (direct, server-side; data cached with tags)
-                             ▲
-                       mocks/  (in-memory dev/test implementation of the same contract) ◄── API_MODE=mock
+app/                 routes: (storefront)/, admin/, api/v1 (proxy + uploads + openapi), api/webhooks, docs
+components/          storefront/, admin/, ui/
+lib/api/             typed REST client + Zod contract (schemas.ts)  ◄── single source of truth for payloads
+lib/backend/         the server: routes, auth, pricing, integrations (Resend, Razorpay, MSG91)
+supabase/migrations/ database schema, RLS, atomic order/stock/payment functions
+openapi/             OpenAPI 3.1 contract (kept in step with the route table by a unit test)
 ```
 
-Read next: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/SETUP.md`](docs/SETUP.md) ·
-[`docs/BACKEND_INTEGRATION.md`](docs/BACKEND_INTEGRATION.md) · [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) ·
-[`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md)
-
-The original prototype documentation is archived in [`docs/prototype/`](docs/prototype/).
+Prices, stock, order ownership, payment status and admin roles are decided on the server only.

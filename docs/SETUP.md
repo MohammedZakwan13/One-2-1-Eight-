@@ -1,64 +1,48 @@
-# Setup guide
+# Setup — local, Docker and manual steps
 
-## Requirements
-* Node.js 22 (>= 20.9) and npm. Docker is optional.
+Target: hosted Supabase project **one2oneight-staging** (ref `ouvkqdubunymmzwzkkip`, Mumbai). Nothing is deployed anywhere else.
 
-## 1. Install
+## 1. Required before local use
+
+| # | Step | Where | Variable / command |
+| --- | --- | --- | --- |
+| 1 | Copy API keys | Supabase Dashboard → Project Settings → API Keys | `SUPABASE_SERVICE_ROLE_KEY` (secret), `SUPABASE_ANON_KEY` (publishable) in `.env.local` |
+| 2 | Apply the database schema | Dashboard → SQL Editor → paste & run **in order**: `supabase/migrations/0001_init.sql`, `0002_backend_features.sql`, then `supabase/seed.sql` | or `npx supabase db push --db-url "postgresql://postgres.<ref>:<DB-PASSWORD>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"` |
+| 3 | Create the first admin | terminal | `ADMIN_PASSWORD='long-password' npm run admin:create -- you@company.com "Your Name" owner` |
+| 4 | Fill real store details | `/admin/settings` | contact e-mail/phone (seed uses `care@example.com`), return policy, shipping fee, low-stock threshold |
+| 5 | Add products | `/admin/products` | upload images, set stock per size |
+| 6 | Write legal pages | `/admin/settings` → Legal pages | `terms`, `privacy` (linked from checkout/footer once published) |
+
+**Later migrations** (run each once in the SQL Editor, then record it in `supabase_migrations.schema_migrations`): `0003_service_role_grants.sql` (applied) and `0004_stock_message.sql` — adds the free-text stock message column; until it is applied, saving a non-empty stock message returns a clear 503 `migration_required` instead of dropping the text. `0005_returns_cancellation.sql` adds product returnability, customer cancellation, returns and refunds (see `docs/ORDER_FLOW_MANUAL_QA.md`); until applied those actions return 503 `migration_required`.
+
+**Free e-mail testing:** `EMAIL_PROVIDER=mailpit` + `docker compose up -d mailpit` captures every order e-mail at http://localhost:8025 (no Resend key needed).
+
+`seed.sql` inserts only store settings, the 8 category tiles, the 3 homepage banners (existing files in `public/images`) and a default delivery rule. It adds **no** products, customers, orders or reviews.
+
+Coupons (`public.coupons`) and delivery rules (`public.pincode_rules`) are edited in Dashboard → Table Editor (no admin screen yet).
+
+## 2. Run
+
 ```bash
-npm ci
+npm run dev                         # http://localhost:3000
+docker compose up --build -d        # http://localhost:3001 — reads .env.local at run time; nothing secret enters the image
+docker compose logs -f web          # logs
+docker compose down                 # stop
 ```
 
-## 2. Configure
-```bash
-cp .env.example .env.local
-```
-See `.env.example` for every variable (all documented, placeholders only).
+Health: `/api/health` (liveness) · `/api/health?deep=1` (also checks the database).
 
-### A. Local development without a backend (mock)
-```ini
-APP_ENV=development
-API_MODE=mock
-MOCK_ADMIN_EMAIL=you@localhost.invalid
-MOCK_ADMIN_PASSWORD=choose-a-long-local-password
-MOCK_OTP_CODE=123456
-```
-* Storefront: http://localhost:3000 · Admin: http://localhost:3000/admin
-* Customer sign-in: any valid 10-digit mobile starting 6–9, code = `MOCK_OTP_CODE`
-* Coupons in the mock: `WELCOME10` (≥ ₹1,499), `LUXE15` (needs a Luxe item). Pincodes starting with `9` are "not serviceable".
-* Online payment methods open the **mock gateway** page where you choose success or failure. COD completes directly.
-* State is in memory: it resets when the server restarts (or `POST /api/v1/__mock/reset`).
+## 3. Required before live e-mail / payments / SMS (optional until then)
 
-### B. Against a real backend
-```ini
-APP_ENV=development            # or staging / production
-API_MODE=live
-API_BASE_URL=https://your-backend-host/v1
-NEXT_PUBLIC_SITE_URL=https://your-domain   # required for staging/production
-```
-The backend must implement `openapi/openapi.yaml`; see [BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md).
+| Feature | Without it | Steps | Variables |
+| --- | --- | --- | --- |
+| **Resend** (order/lead e-mails) | Orders & leads still save; e-mails logged as `skipped_unconfigured` | resend.com → verify sending domain → API key; Webhooks → add `{SITE}/api/webhooks/resend` (events delivered, bounced, complained, failed) | `RESEND_API_KEY`, `EMAIL_FROM`, `INTERNAL_NOTIFICATION_EMAIL`, `RESEND_WEBHOOK_SECRET` |
+| **Razorpay** (UPI/card) | Only Cash on delivery is offered | Razorpay Dashboard → test keys; Settings → Webhooks → `{SITE}/api/webhooks/razorpay` (events `payment.captured`, `order.paid`) | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` |
+| **MSG91** (customer SMS sign-in) | No customer sign-in, so checkout is unavailable (checkout, wishlist, reviews and account all need sign-in) | MSG91 dashboard → OTP → Widget (Web SDK, custom UI, SMS, India); copy `widgetId` and `tokenAuth` from the generated code, and the dedicated website Authkey | `MSG91_AUTH_KEY`, `MSG91_WIDGET_ID`, `MSG91_WIDGET_TOKEN_AUTH` |
+| pg_cron (auto-release unpaid online orders after 60 min) | Held stock is not released automatically | Dashboard → Database → Extensions → enable `pg_cron`, re-run the last block of `0001_init.sql` | — |
 
-## 3. Run
-```bash
-npm run dev          # development
-npm run build && npm start   # production mode locally
-```
+Webhook URLs must be public HTTPS (use a tunnel such as ngrok for local testing).
 
-## 4. Quality gates
-```bash
-npm run lint
-npm run typecheck
-npm test                      # unit + contract tests
-npm run test:e2e:install      # once: downloads Chromium
-npm run test:e2e              # builds with the mock API and runs the customer & admin journeys
-npm run check                 # lint + typecheck + unit + build
-```
-The e2e run uses its own test-only mock credentials (see `playwright.config.ts`); they never apply to live mode.
+## 4. Before a future deployment
 
-## Troubleshooting
-| Symptom | Cause / fix |
-|---|---|
-| `[env] API_BASE_URL is required` | `API_MODE=live` but no backend URL. Set it, or use mock mode locally. |
-| `[env] API_MODE=mock is only permitted…` | Mock requested with `APP_ENV=staging/production`. Intentional. |
-| `NEXT_PUBLIC_SITE_URL host … looks like a placeholder` | Production needs the real https domain. |
-| Admin login says "not configured" | In mock mode set `MOCK_ADMIN_EMAIL` and `MOCK_ADMIN_PASSWORD`. |
-| Pages show an error screen with a reference | The backend is unreachable or returned an off-contract response – check server logs for `[api]`. |
+Set `APP_ENV=production`, a real https `NEXT_PUBLIC_SITE_URL`, all variables above in the host's secret store; keep `ENABLE_API_DOCS` unset (Swagger is then off) or protect it. Rotate any key that was ever pasted into chat or committed.

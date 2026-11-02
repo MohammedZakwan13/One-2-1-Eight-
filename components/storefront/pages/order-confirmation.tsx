@@ -2,10 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, Clock3, PackageCheck, X } from 'lucide-react';
-import { useRuntimeConfig, useUi } from '@/components/providers/app-providers';
+import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
 import { RouteLink } from '@/components/ui/route-link';
 import { Footer } from '@/components/storefront/footer';
+import { OrderActions } from '@/components/storefront/order-actions';
 import { api } from '@/lib/api/client';
 import { errorMessage, isApiError } from '@/lib/api/errors';
 import type { Order, PaymentStatus } from '@/lib/api/schemas';
@@ -23,12 +24,11 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 export function OrderConfirmation({ orderId, token }: { orderId: string; token: string }) {
   const { settings } = useStorefrontData();
   const { transition: onTransition } = useUi();
-  const { mock } = useRuntimeConfig();
   const query = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => api.orders.get(orderId, token || undefined),
     enabled: Boolean(orderId),
-    refetchInterval: current => { const status = current.state.data?.paymentStatus; return status === 'pending' || status === 'unpaid' ? 3000 : false; },
+    refetchInterval: current => { const status = current.state.data?.paymentStatus; if (status === 'pending' || status === 'unpaid') return 3000; const fulfilment = current.state.data?.status; return fulfilment && !['delivered', 'cancelled', 'refunded'].includes(fulfilment) ? 30000 : false; },
   });
   const order = query.data;
 
@@ -58,7 +58,8 @@ export function OrderConfirmation({ orderId, token }: { orderId: string; token: 
           : `This order is ${order.status.replace(/_/g, ' ')}.`}</p>
     <div className="confirmation-receipt"><div><span>ORDER NUMBER</span><strong>{order.number}</strong></div><div><span>ORDER TOTAL</span><strong>{money(order.totals.total)}</strong></div><div><span>PAYMENT</span><strong>{METHOD_LABEL[order.paymentMethod]} · {PAYMENT_LABEL[order.paymentStatus]}</strong></div></div>
     <div className="confirmation-next"><PackageCheck size={20} /><div><strong>{placed ? "You're all set." : 'Need a hand?'}</strong><span>Questions about this order? Write to {settings.contactEmail} and quote order {order.number}.</span></div></div>
-    {mock && <p className="dev-note">Development mock order — nothing was charged or shipped.</p>}
+
+    <OrderActions order={order} token={token} />
     <div className="confirmation-actions">{failed || awaiting ? <RouteLink href="/bag" className="button button-dark" onClick={onTransition}>BACK TO YOUR BAG <ArrowRight size={16} /></RouteLink> : <RouteLink href="/collections/new-arrivals" className="button button-dark" onClick={onTransition}>KEEP EXPLORING <ArrowRight size={16} /></RouteLink>}<RouteLink href="/" className="button button-outline" onClick={onTransition}>BACK HOME</RouteLink></div>
   </main><Footer /></>;
 }

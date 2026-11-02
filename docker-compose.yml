@@ -1,19 +1,46 @@
-# Local/self-hosted convenience. Values come from your shell or an untracked `.env` file – nothing secret lives here.
-#   NEXT_PUBLIC_SITE_URL=https://www.your-domain.tld API_BASE_URL=https://api.your-domain.tld/v1 docker compose up --build
+# Local run of the whole app (storefront + admin + API + Swagger) against the hosted Supabase staging project.
+# Secrets come from your untracked .env.local at RUN time; nothing secret is baked into the image.
+#
+#   docker compose up --build -d      → http://localhost:3001  (Swagger: http://localhost:3001/docs)
+#   docker compose down               → stop and remove the container
 services:
   web:
     build:
       context: .
       args:
-        APP_ENV: ${APP_ENV:-production}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
-        API_BASE_URL: ${API_BASE_URL:?set API_BASE_URL}
+        APP_ENV: staging
+        NEXT_PUBLIC_SITE_URL: http://localhost:3001
+    image: one2oneight-web:local
+    env_file:
+      - .env.local
     environment:
-      APP_ENV: ${APP_ENV:-production}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
-      API_BASE_URL: ${API_BASE_URL}
-      ADMIN_SESSION_COOKIE: ${ADMIN_SESSION_COOKIE:-o218_admin_session}
-      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
+      # Override the dev-server values in .env.local: the container is reached on host port 3001.
+      APP_ENV: staging
+      NEXT_PUBLIC_SITE_URL: http://localhost:3001
+      HOSTNAME: 0.0.0.0
+      # Reached by service name inside the compose network (only used when EMAIL_PROVIDER=mailpit in .env.local).
+      # Local email capture is opt-in: EMAIL_PROVIDER=mailpit docker compose up -d (APP_ENV is staging here, so it is allowed).
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
     ports:
-      - "3000:3000"
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  # Local email capture for testing (no real delivery). Inbox: http://localhost:8025   SMTP: localhost:1025
+  #   docker compose up -d mailpit      docker compose logs -f mailpit      docker compose stop mailpit
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+    environment:
+      MP_MAX_MESSAGES: "500"
     restart: unless-stopped

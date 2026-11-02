@@ -35,6 +35,8 @@ export type TransportRequest = {
   revalidate?: number | false;
   tags?: string[];
   forwardCookies?: boolean;
+  /** Client IP already verified by the proxy route (see lib/backend/client-ip.ts). Never taken from request headers. */
+  clientIp?: string;
 };
 export type Transport = (request: TransportRequest) => Promise<Response>;
 

@@ -11475,3 +11475,188 @@ button {
   width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
+
+
+/* ── admin image uploader ── */
+.image-uploader{display:grid;gap:10px}
+.image-uploader-label{font-size:12px;letter-spacing:.08em;font-weight:700}
+.image-dropzone{display:grid;justify-items:center;gap:6px;padding:18px;border:1.5px dashed #c9c2b6;border-radius:12px;text-align:center;background:#faf8f4}
+.image-dropzone.is-dragging{border-color:#a9793f;background:#f3ebdd}
+.image-dropzone p{margin:0;font-size:13px}.image-dropzone small{color:#777}
+.image-upload-progress{display:grid;grid-template-columns:1fr 120px 40px;gap:10px;align-items:center;font-size:12px}
+.image-upload-progress i{height:6px;border-radius:99px;background:#e7e1d6;overflow:hidden}.image-upload-progress b{display:block;height:100%;background:#a9793f}
+.image-uploader-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;list-style:none;margin:0;padding:0}
+.image-uploader-grid li{position:relative;border:1px solid #e3ddd1;border-radius:10px;overflow:hidden;background:#fff}
+.image-uploader-grid .smart-image{aspect-ratio:3/4;width:100%}
+.image-primary-badge{position:absolute;top:6px;left:6px;background:#111;color:#fff;font-size:9px;letter-spacing:.08em;padding:3px 6px;border-radius:99px}
+.image-uploader-actions{display:flex;justify-content:center;gap:4px;padding:6px;background:#faf8f4}
+.image-uploader-actions button{display:grid;place-items:center;width:26px;height:26px;border:1px solid #ddd5c7;border-radius:6px;background:#fff;cursor:pointer}
+.image-uploader-actions button:disabled{opacity:.35;cursor:default}
+.product-card-stock-note{margin:6px 0 0;font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1.35;text-transform:uppercase;color:#8a5a1f;overflow-wrap:anywhere}
+.stock-note{margin:10px 0 0;font-size:13px;font-weight:600;color:#8a5a1f}
+.admin-lowstock-card{grid-column:1/-1}
+.legal-page-editor{display:grid;gap:10px;margin-top:14px}
+.legal-page-editor textarea{min-height:160px}
+
+/* Size-stock grid reuses .admin-feature-flags (13px checkbox sizing); give its number inputs a readable size. */
+.admin-feature-flags.admin-size-stock label{font-size:12px !important;font-weight:700;gap:8px}
+.admin-feature-flags.admin-size-stock input{width:76px !important;height:40px !important;min-height:40px !important;padding:0 8px !important;font-size:14px !important;text-align:center}
+
+/* ── image uploader: always-visible Replace/Remove, overlaid so the grid never clips them ── */
+.image-uploader-grid li{display:block;aspect-ratio:3/4;min-height:150px}
+.image-uploader-grid li .smart-image{position:absolute;inset:0;width:100%;height:100%}
+.image-uploader-actions{position:absolute;left:0;right:0;bottom:0;display:flex;gap:4px;padding:6px;background:rgba(250,248,244,.94)}
+.image-uploader-actions button{flex:1;width:auto;height:28px;padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.04em}
+.image-uploader-actions button.is-danger{color:#a3262a;border-color:#e3b4b6}
+.image-uploader-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.image-uploader-grid li{aspect-ratio:auto;min-height:0;display:flex;flex-direction:column}
+.image-uploader-grid li .smart-image{position:relative;inset:auto;height:auto;aspect-ratio:3/4}
+.image-uploader-actions{position:static;flex-wrap:wrap;gap:6px;padding:8px;background:#faf8f4}
+.image-uploader-actions button{flex:1 1 60px;min-width:0;height:30px;padding:0 8px;font-size:12px;white-space:nowrap}
+.admin-form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:18px}
+.admin-danger-btn{height:42px;padding:0 18px;border:1px solid #e3b4b6;border-radius:8px;background:#fff;color:#a3262a;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer}
+.admin-danger-btn:hover{background:#fbeeee}
+.image-uploader-move{position:absolute;top:6px;right:6px;display:flex;gap:3px}
+.image-uploader-move button{display:grid;place-items:center;width:24px;height:24px;border:1px solid #ddd5c7;border-radius:6px;background:rgba(255,255,255,.95);cursor:pointer}
+.image-uploader-move button:disabled{opacity:.35;cursor:default}
+
+/* ── in-app confirmation dialog ── */
+.confirm-layer{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;background:rgba(17,17,17,.45)}
+.confirm-dialog{width:min(440px,100%);display:grid;gap:12px;padding:22px;border-radius:14px;background:#fff;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.confirm-dialog h2{margin:0;font-size:20px}
+.confirm-dialog p{margin:0;font-size:14px;line-height:1.5;color:#3d4550}
+.confirm-dialog label{display:grid;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:4px}
+.confirm-danger{background:#a3262a !important;border-color:#a3262a !important}
+.confirm-dialog button:focus-visible,.confirm-dialog input:focus-visible{outline:2px solid #a9793f;outline-offset:2px}
+
+.order-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;padding:12px 4px;font-size:13px}
+.order-detail-grid h3{margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7a7468}
+.order-detail-grid p,.order-detail-grid ul,.order-detail-grid ol{margin:0 0 12px;padding-left:0;list-style:none;line-height:1.5}
+.admin-table td .admin-secondary-btn{margin:2px 4px 2px 0;white-space:nowrap}
+
+.order-actions{max-width:640px;margin:28px auto 0;text-align:left;font-size:14px}
+.order-actions h2{font-size:12px;letter-spacing:.12em;margin:0 0 10px}
+.order-timeline{list-style:none;margin:0 0 14px;padding:0;border-left:2px solid #ddd5c7}
+.order-timeline li{display:flex;justify-content:space-between;gap:12px;padding:4px 0 4px 12px}
+.order-timeline span{color:#7a7468;font-size:12px}
+.order-panel{border:1px solid #ddd5c7;border-radius:10px;padding:14px;margin:12px 0;display:grid;gap:10px}
+.order-panel label{display:grid;gap:4px;font-size:13px}
+.order-panel textarea,.order-panel input{border:1px solid #ddd5c7;border-radius:8px;padding:8px;font:inherit}
+.order-panel-actions{display:flex;flex-wrap:wrap;gap:10px}
+.order-note,.order-notice{color:#6b655a;font-size:13px}
+.order-return{border:1px solid #ddd5c7;border-radius:10px;padding:12px;margin:12px 0}
+.order-return p{margin:4px 0}
+
+.admin-tab-content,.admin-orders-full{min-width:0;max-width:100%}
+.order-detail-grid{white-space:normal;position:sticky;left:0;max-width:calc(100vw - 56px)}
+
+.admin-main{min-width:0;max-width:100%}
+.admin-main>*{min-width:0}
+
+.initial-splash-video{animation:none!important;background:#000;overflow:hidden}
+/* Whole frame always visible: contain (never cover), centred, on a black field; dvh follows the mobile browser's changing toolbars. */
+.initial-splash-video{height:100vh;height:100dvh}
+.splash-video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;object-position:center;display:block}
+
+/* ───── CMS typography system (scoped to .admin-app; the storefront is untouched) ─────
+   body 14px · inputs 14.5px · labels 13px · metadata 12–12.5px · nothing important below 12px */
+.admin-app{--admin-fs-body:14px;--admin-fs-nav:14px;--admin-fs-input:14.5px;--admin-fs-label:13px;--admin-fs-meta:12.5px;--admin-fs-micro:12px;--admin-muted:#5d584e;font-size:var(--admin-fs-body);line-height:1.5}
+.admin-app .admin-sidebar nav button,.admin-app .admin-sidebar nav button span{font-size:var(--admin-fs-nav)}
+.admin-app .admin-nav-label,.admin-app .admin-pill,.admin-app .eyebrow,.admin-app .admin-count-chip,.admin-app .status-pill,.admin-app .stock-indicator,.admin-app .nav-count{font-size:var(--admin-fs-micro)}
+.admin-app .admin-nav-label{letter-spacing:.1em;color:var(--admin-muted)}
+.admin-app .admin-sidebar-store strong,.admin-app .admin-user strong,.admin-app .admin-topbar-breadcrumb strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-sidebar-store span,.admin-app .admin-user span,.admin-app .admin-topbar-breadcrumb span,.admin-app .admin-app-footer span{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .store-avatar,.admin-app .admin-user-avatar,.admin-app .admin-topbar-avatar{font-size:var(--admin-fs-micro)}
+.admin-app .admin-logout,.admin-app .admin-view-store,.admin-app .admin-topbar-right span,.admin-app .admin-topbar-right strong{font-size:var(--admin-fs-label)}
+.admin-app .brand-mark span{font-size:inherit}
+.admin-app .admin-table th{font-size:var(--admin-fs-micro);letter-spacing:.06em;color:var(--admin-muted)}
+.admin-app .admin-table td,.admin-app .admin-table td strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-table td small,.admin-app .admin-table td em{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-edit-form label,.admin-app .admin-feature-flags label,.admin-app label.admin-check,.admin-app .admin-feature-flags legend,.admin-app .admin-edit-form legend{font-size:var(--admin-fs-label)}
+.admin-app input:not([type=checkbox]):not([type=radio]),.admin-app select,.admin-app textarea,.admin-app option{font-size:var(--admin-fs-input)}
+.admin-app .admin-feature-flags input:not([type=checkbox]):not([type=radio]){font-size:var(--admin-fs-body)}
+.admin-app small,.admin-app .admin-field-note,.admin-app .image-dropzone small{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-page-heading p,.admin-app .admin-card-heading p{font-size:var(--admin-fs-body)}
+.admin-app .admin-primary-btn,.admin-app .admin-secondary-btn,.admin-app .admin-quiet-btn,.admin-app .admin-text-button,.admin-app .admin-danger-quiet,.admin-app .metric-text-action{font-size:var(--admin-fs-label)}
+.admin-app .admin-metric-card span,.admin-app .admin-metric-card em,.admin-app .admin-metric-card small,.admin-app .admin-metric-card i,.admin-app strong.metric-warning{font-size:var(--admin-fs-meta)}
+.admin-app .admin-quick-action strong,.admin-app .admin-product-list-row strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-quick-action small,.admin-app .admin-product-list-row small,.admin-app .admin-product-list-row em{font-size:var(--admin-fs-meta)}
+.admin-app .admin-list-toolbar span,.admin-app .revenue-total span{font-size:var(--admin-fs-label)}
+.admin-app .chart-x-labels span,.admin-app .chart-y-labels span,.admin-app .image-primary-badge{font-size:11px}
+.admin-app :focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
+.admin-app .form-error-banner,.admin-app [role=alert]{font-size:var(--admin-fs-body)}
+
+/* ───── Orders: labelled Name / Mobile ───── */
+.order-customer .order-field{display:flex;gap:8px;align-items:baseline;white-space:nowrap}
+.order-customer .order-field em{font-style:normal;font-size:var(--admin-fs-micro,12px);letter-spacing:.06em;text-transform:uppercase;color:var(--admin-muted,#5d584e);min-width:48px}
+.order-customer .order-field b{font-weight:600}
+.order-col-mobile{display:none}
+.order-customer .order-field-mobile{display:flex}
+@media (min-width:1100px){
+  .order-col-mobile{display:table-cell}
+  .order-customer .order-field-mobile{display:none}
+  .order-customer .order-field em{display:none}
+}
+
+/* ───── LUXE rail (between hero and Shop by category) ───── */
+.luxe-rail-section{padding-top:64px;padding-bottom:0}
+.luxe-rail-section+.category-section{padding-top:64px}
+.luxe-rail{position:relative}
+.luxe-rail-track{display:flex;flex-wrap:nowrap;gap:18px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding-left:2px;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding:4px 2px 18px}
+.luxe-rail-track:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+.luxe-rail-item{flex:0 0 clamp(210px,21vw,290px);min-width:0;scroll-snap-align:start}
+.luxe-rail.has-more:after{content:"";position:absolute;top:0;right:0;bottom:18px;width:56px;pointer-events:none;background:linear-gradient(to right,rgba(255,255,255,0),rgba(255,255,255,.95))}
+.luxe-rail-btn{position:absolute;top:38%;z-index:2;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid rgba(0,0,0,.2);background:#fff;color:#111;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.12);transition:opacity .2s}
+.luxe-rail-btn:disabled{opacity:.3;cursor:default}
+.luxe-rail-prev{left:-14px}.luxe-rail-next{right:-14px}
+@media (max-width:760px){
+  .luxe-rail-section{padding-top:40px}
+  .luxe-rail-section+.category-section{padding-top:40px}
+  .luxe-rail-item{flex-basis:min(68vw,250px)}
+  .luxe-rail-btn{display:none}
+}
+
+/* ───── CMS typography: remaining pages (settings, banners, leads, category rows, toggles, callouts) ───── */
+.admin-app .admin-settings-layout label,.admin-app .hero-editor-fields label,.admin-app .admin-feature-flags label{font-size:var(--admin-fs-label)}
+.admin-app .admin-settings-layout small,.admin-app .hero-editor-fields small,.admin-app .hero-clickthrough-note,.admin-app .admin-check small{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-category-row strong,.admin-app .lead-detail-grid strong,.admin-app .collection-status-grid strong,.admin-app .admin-callout strong{font-size:var(--admin-fs-body)}
+.admin-app .lead-detail-grid span,.admin-app .collection-status-grid span,.admin-app .admin-callout p,.admin-app .admin-table-empty,.admin-app .admin-dashboard-grid p{font-size:var(--admin-fs-meta)}
+.admin-app .admin-toggle em{font-size:var(--admin-fs-micro);font-style:normal}
+.admin-app .admin-category-row small{font-size:var(--admin-fs-meta)}
+
+.admin-app .admin-edit-form .admin-feature-flags label,.admin-app .admin-edit-form .admin-feature-flags label span,.admin-app label.admin-full-label,.admin-app .admin-editor-empty p,.admin-app .admin-content-section-head span,.admin-app .admin-content-section-head p,.admin-app .admin-lead-list-row strong,.admin-app .admin-lead-avatar{font-size:var(--admin-fs-label)}
+.admin-app .admin-edit-form small,.admin-app .admin-card .admin-edit-form small{font-size:var(--admin-fs-meta)}
+
+/* ───── LUXE rail v2: headerless, compact cards, full width ───── */
+.luxe-rail-section{padding-top:48px;padding-bottom:36px;background:#fff;box-shadow:0 0 0 100vmax #fff;clip-path:inset(0 -100vmax)}
+.luxe-rail-section+.category-section{padding-top:48px}
+.luxe-rail-item{flex:0 0 clamp(230px,20vw,300px)}
+.luxe-rail-track{gap:clamp(36px,5vw,80px);padding:2px 2px 14px}
+.luxe-rail-btn{top:34%;width:40px;height:40px}
+.luxe-rail-prev{left:-10px}.luxe-rail-next{right:-10px}
+@media (max-width:1024px){.luxe-rail-item{flex-basis:clamp(220px,32vw,280px)}}
+@media (max-width:760px){
+  .luxe-rail-section{padding-top:24px}
+  .luxe-rail-section+.category-section{padding-top:36px}
+  .luxe-rail-item{flex-basis:min(68vw,270px)}
+  .luxe-rail-track{gap:28px}
+}
+
+/* LUXE rail: no visible scrollbar (arrows, swipe, wheel and keyboard still scroll it) */
+.luxe-rail-track{scrollbar-width:none;-ms-overflow-style:none}
+.luxe-rail-track::-webkit-scrollbar{display:none;width:0;height:0}
+.luxe-rail-track{padding-bottom:2px}
+
+/* LUXE rail tiles: image + name only; the whole tile is one link to the LUXE page */
+/* Open presentation: name above, image below, no card box. The image keeps its own proportions (contain, never cropped) inside a 4:5 area so labels line up. */
+.luxe-tile{display:flex;flex-direction:column;align-items:center;color:inherit;text-decoration:none}
+.luxe-tile .smart-image{display:block;width:100%;height:auto;aspect-ratio:4/5;overflow:hidden;background:transparent;border:0;border-radius:0;box-shadow:none}
+.luxe-tile .smart-image img{width:100%;height:100%;object-fit:contain;object-position:center;transition:none}
+.luxe-tile-name{display:block;width:100%;margin:0 0 18px;text-align:center;text-transform:uppercase;letter-spacing:.02em;font-size:clamp(15px,1.45vw,20px);font-weight:500;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.luxe-tile:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.luxe-rail-btn{top:52%}
+
+/* MSG91 widget CAPTCHA mount (hCaptcha checkbox) */
+.msg91-captcha{display:flex;justify-content:center;margin:14px 0 4px;max-width:100%;overflow:hidden}
+.msg91-captcha:empty{display:none}

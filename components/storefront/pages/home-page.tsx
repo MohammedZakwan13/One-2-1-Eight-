@@ -8,6 +8,7 @@ import { SmartImage } from '@/components/ui/smart-image';
 import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { ProductGrid } from '@/components/storefront/product-grid';
+import { LuxeRail } from '@/components/storefront/luxe-rail';
 import { Footer } from '@/components/storefront/footer';
 import { money } from '@/lib/format';
 import { useUi } from '@/components/providers/app-providers';
@@ -18,7 +19,7 @@ import { errorMessage } from '@/lib/api/errors';
 import type { Category, HeroSlide, Product } from '@/lib/api/schemas';
 import { isStorefrontCategory } from '@/lib/catalog';
 
-export function HomePage({ heroSlides, categories, featured, latest }: { heroSlides: HeroSlide[]; categories: Category[]; featured: Product[]; latest: Product[] }) {
+export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }: { heroSlides: HeroSlide[]; categories: Category[]; featured: Product[]; latest: Product[]; luxe?: Product[] }) {
   const { settings } = useStorefrontData();
   const { transition: onTransition, notify } = useUi();
   const { wishlist, onToggleWishlist } = useWishlistToggle();
@@ -57,6 +58,8 @@ export function HomePage({ heroSlides, categories, featured, latest }: { heroSli
           <div className="hero-content"><h1>{currentSlide.title.split('\n').map((line, idx) => <React.Fragment key={`${line}-${idx}`}>{line}{idx === 0 && currentSlide.title.includes('\n') && <br />}</React.Fragment>)}</h1><p>{currentSlide.body}</p></div>
         </Link> : <div className="hero-empty"><BrandMark /><h1>{settings.brandLine}</h1></div>}
       </section>
+
+      <LuxeRail products={luxe} onTransition={onTransition} />
 
       <section className="category-section section-shell"><SectionHeading eyebrow="START WITH YOUR STYLE" title="Shop by category" description="The pieces you'll reach for, on repeat." href="/collections/all" onTransition={onTransition} />
         <div className="category-grid">{categories.filter(isStorefrontCategory).map((category, index) => <RouteLink key={category.id} className={`category-card category-card-${index + 1}`} href={`/collections/${category.slug}`} onClick={onTransition}><SmartImage src={category.image} alt={category.name} /><div className="category-card-shade" /><span className="category-count">0{index + 1}</span><div className="category-card-copy"><h3>{category.name}</h3><span>EXPLORE <ArrowUpRight size={15} /></span></div></RouteLink>)}</div>

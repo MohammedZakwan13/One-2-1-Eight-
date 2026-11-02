@@ -4,7 +4,7 @@ import { isSameOriginWrite, sanitizeProxyPath } from '@/lib/api/proxy';
 import { buildCsp, securityHeaders } from '@/lib/security-headers';
 import { jsonLd } from '@/lib/site';
 import { safeUrl, internalPath } from '@/lib/api/schemas';
-import { csvCell } from '@/mocks/store';
+import { csvCell } from '@/lib/backend/core';
 
 describe('proxy path sanitising', () => {
   it('accepts normal API paths', () => {
@@ -68,6 +68,17 @@ describe('security headers', () => {
     expect(csp).toContain('script-src \'self\' \'unsafe-inline\' https://checkout.razorpay.com');
     expect(csp).toContain('frame-src https://api.razorpay.com');
     expect(csp).toContain('connect-src \'self\' https://lumberjack.razorpay.com');
+  });
+  it('allows the MSG91 widget and hCaptcha sources only when the widget is configured', () => {
+    const off = buildCsp({}, false);
+    expect(off).not.toMatch(/msg91|hcaptcha/);
+    expect(off).toContain("frame-src 'none'");
+    const csp = buildCsp({ MSG91_WIDGET_ID: 'w' }, false);
+    expect(csp).toMatch(/script-src[^;]*https:\/\/verify\.msg91\.com[^;]*https:\/\/\*\.hcaptcha\.com/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/control\.msg91\.com[^;]*https:\/\/msg91backup\.phone91\.com[^;]*https:\/\/\*\.hcaptcha\.com/);
+    expect(csp).toMatch(/frame-src https:\/\/hcaptcha\.com https:\/\/\*\.hcaptcha\.com/);
+    expect(csp).toMatch(/style-src 'self' 'unsafe-inline' https:\/\/hcaptcha\.com/);
+    expect(csp).not.toMatch(/script-src[^;]*\*(?!\.hcaptcha)/);
   });
   it('sets HSTS only in production', () => {
     const names = (dev: boolean) => securityHeaders({}, dev).map(header => header.key);

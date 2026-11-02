@@ -1,65 +1,100 @@
 import { describe, expect, it } from 'vitest';
 import { EnvError, parseServerEnv } from '@/lib/env';
 
-const live = { API_BASE_URL: 'https://api.shop.in/v1', NEXT_PUBLIC_SITE_URL: 'https://www.shop.in' };
+const supabase = { SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service-key', SUPABASE_ANON_KEY: 'anon-key' };
+const proxy = { TRUSTED_PROXY: 'cloudflare', TRUSTED_PROXY_SECRET: 'origin-secret-0123456789-abcdef' };
+const prod = { ...supabase, ...proxy, NEXT_PUBLIC_SITE_URL: 'https://www.shop.in' };
+
+describe('email provider selection', () => {
+  it('rejects the Mailpit provider in production and never falls back to it', () => {
+    expect(() => parseServerEnv({ NODE_ENV: 'production', ...prod, EMAIL_PROVIDER: 'mailpit' })).toThrow(/local testing only/);
+    expect(() => parseServerEnv({ APP_ENV: 'production', ...prod, EMAIL_PROVIDER: 'mailpit' })).toThrow(EnvError);
+  });
+  it('defaults to Resend (unconfigured = no provider, not Mailpit) and enables Mailpit only when asked locally', () => {
+    const plain = parseServerEnv({ APP_ENV: 'development', ...supabase });
+    expect(plain.mailpit).toBeNull();
+    expect(plain.resend).toBeNull();
+    const local = parseServerEnv({ APP_ENV: 'development', ...supabase, EMAIL_PROVIDER: 'mailpit' });
+    expect(local.mailpit).toMatchObject({ host: 'localhost', port: 1025 });
+    expect(local.resend).toBeNull();
+    expect(parseServerEnv({ APP_ENV: 'development', ...supabase, EMAIL_PROVIDER: 'mailpit', SMTP_HOST: 'mailpit' }).mailpit?.host).toBe('mailpit');
+  });
+  it('keeps Resend usable with only configuration once the keys exist', () => {
+    const env = parseServerEnv({ APP_ENV: 'development', ...supabase, RESEND_API_KEY: 're_x', EMAIL_FROM: 'Shop <orders@shop.in>' });
+    expect(env.resend).toMatchObject({ from: 'Shop <orders@shop.in>' });
+    expect(env.mailpit).toBeNull();
+  });
+});
 
 describe('parseServerEnv', () => {
-  it('treats a production build as production by default and requires real configuration', () => {
+  it('defaults to the built-in Supabase backend and treats a production build as production', () => {
     expect(() => parseServerEnv({ NODE_ENV: 'production' })).toThrow(EnvError);
-    const env = parseServerEnv({ NODE_ENV: 'production', ...live });
+    const env = parseServerEnv({ NODE_ENV: 'production', ...prod });
     expect(env.appEnv).toBe('production');
     expect(env.isProduction).toBe(true);
-    expect(env.mockEnabled).toBe(false);
-    expect(env.apiBaseUrl).toBe('https://api.shop.in/v1');
+    expect(env.apiMode).toBe('supabase');
+    expect(env.supabase?.url).toBe('https://abc.supabase.co');
   });
 
-  it('never allows mock mode outside development/test', () => {
-    for (const appEnv of ['production', 'staging']) {
-      expect(() => parseServerEnv({ ...live, APP_ENV: appEnv, API_MODE: 'mock' })).toThrow(/only permitted/);
-    }
-    // NODE_ENV=production without APP_ENV defaults to production → mock refused too
-    expect(() => parseServerEnv({ NODE_ENV: 'production', ...live, API_MODE: 'mock' })).toThrow(/only permitted/);
+  it('names exactly which Supabase variables are missing', () => {
+    expect(() => parseServerEnv({ APP_ENV: 'development', SUPABASE_URL: supabase.SUPABASE_URL })).toThrow(/SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY/);
   });
 
-  it('allows mock mode in development and test, with optional env-provided mock credentials', () => {
-    const env = parseServerEnv({ APP_ENV: 'test', API_MODE: 'mock', MOCK_ADMIN_EMAIL: 'a@localhost.invalid', MOCK_ADMIN_PASSWORD: 'long-enough-1' });
-    expect(env.mockEnabled).toBe(true);
-    expect(env.mockAdmin).toEqual({ email: 'a@localhost.invalid', password: 'long-enough-1' });
-    expect(env.siteUrl).toBe('http://localhost:3000');
+  it('tolerates missing secrets only during `next build`', () => {
+    const env = parseServerEnv({ APP_ENV: 'development', NEXT_PHASE: 'phase-production-build' });
+    expect(env.supabase).toBeNull();
   });
 
-  it('has no built-in admin credentials', () => {
-    expect(parseServerEnv({ APP_ENV: 'development', API_MODE: 'mock' }).mockAdmin).toBeNull();
-  });
-
-  it('ignores mock credentials entirely when mock mode is off', () => {
-    const env = parseServerEnv({ APP_ENV: 'production', ...live, MOCK_ADMIN_EMAIL: 'a@b.co', MOCK_ADMIN_PASSWORD: 'long-enough-1', MOCK_OTP_CODE: '123456' });
-    expect(env.mockAdmin).toBeNull();
-    expect(env.mockOtpCode).toBeNull();
+  it('rejects the removed mock mode', () => {
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, API_MODE: 'mock' })).toThrow(EnvError);
   });
 
   it('requires an API base URL in live mode and https in production', () => {
-    expect(() => parseServerEnv({ APP_ENV: 'development' })).toThrow(/API_BASE_URL is required/);
-    expect(() => parseServerEnv({ APP_ENV: 'production', API_BASE_URL: 'http://api.shop.in', NEXT_PUBLIC_SITE_URL: 'https://www.shop.in' })).toThrow(/https/);
-    expect(parseServerEnv({ APP_ENV: 'development', API_BASE_URL: 'http://localhost:4000/v1' }).apiBaseUrl).toBe('http://localhost:4000/v1');
+    expect(() => parseServerEnv({ APP_ENV: 'development', API_MODE: 'live' })).toThrow(/API_BASE_URL is required/);
+    expect(() => parseServerEnv({ APP_ENV: 'production', API_MODE: 'live', API_BASE_URL: 'http://api.shop.in', NEXT_PUBLIC_SITE_URL: 'https://www.shop.in' })).toThrow(/https/);
+    expect(parseServerEnv({ APP_ENV: 'development', API_MODE: 'live', API_BASE_URL: 'http://localhost:4000/v1' }).apiBaseUrl).toBe('http://localhost:4000/v1');
+  });
+
+  it('requires https for Supabase in production', () => {
+    expect(() => parseServerEnv({ APP_ENV: 'production', ...prod, SUPABASE_URL: 'http://abc.supabase.co' })).toThrow(/https/);
   });
 
   it('rejects placeholder or non-https site URLs in production', () => {
     for (const siteUrl of ['https://one2oneight.example', 'https://your-domain.com', 'https://shop.invalid', 'http://www.shop.in', 'https://localhost']) {
-      expect(() => parseServerEnv({ APP_ENV: 'production', API_BASE_URL: live.API_BASE_URL, NEXT_PUBLIC_SITE_URL: siteUrl })).toThrow(EnvError);
+      expect(() => parseServerEnv({ APP_ENV: 'production', ...supabase, NEXT_PUBLIC_SITE_URL: siteUrl })).toThrow(EnvError);
     }
   });
 
   it('requires a site URL for staging and production but not local development', () => {
-    expect(() => parseServerEnv({ APP_ENV: 'staging', API_BASE_URL: live.API_BASE_URL })).toThrow(/NEXT_PUBLIC_SITE_URL/);
-    expect(parseServerEnv({ APP_ENV: 'development', API_MODE: 'mock' }).siteUrl).toBe('http://localhost:3000');
+    expect(() => parseServerEnv({ APP_ENV: 'staging', ...supabase })).toThrow(/NEXT_PUBLIC_SITE_URL/);
+    expect(parseServerEnv({ APP_ENV: 'development', ...supabase }).siteUrl).toBe('http://localhost:3000');
+  });
+
+  it('requires paired provider credentials and exposes them only when complete', () => {
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, RAZORPAY_KEY_ID: 'rzp_test_x' })).toThrow(/RAZORPAY/);
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, RESEND_API_KEY: 're_x' })).toThrow(/EMAIL_FROM/);
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, MSG91_AUTH_KEY: 'k' })).toThrow(/MSG91/);
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, MSG91_AUTH_KEY: 'k', MSG91_WIDGET_ID: 'w' })).toThrow(/MSG91/);
+    const bare = parseServerEnv({ APP_ENV: 'development', ...supabase });
+    expect(bare.razorpay).toBeNull();
+    expect(bare.resend).toBeNull();
+    expect(bare.msg91).toBeNull();
+    expect(parseServerEnv({ APP_ENV: 'development', ...supabase, MSG91_AUTH_KEY: 'k', MSG91_WIDGET_ID: 'w1', MSG91_WIDGET_TOKEN_AUTH: 't1' }).msg91).toEqual({ authKey: 'k', widgetId: 'w1', tokenAuth: 't1' });
+    const full = parseServerEnv({ APP_ENV: 'development', ...supabase, RESEND_API_KEY: 're_x', EMAIL_FROM: 'Shop <orders@shop.in>', INTERNAL_NOTIFICATION_EMAIL: 'team@shop.in' });
+    expect(full.resend).toEqual({ apiKey: 're_x', from: 'Shop <orders@shop.in>', internalEmail: 'team@shop.in', webhookSecret: null });
+  });
+
+  it('serves API docs outside production by default, and only on request in production', () => {
+    expect(parseServerEnv({ APP_ENV: 'development', ...supabase }).apiDocsEnabled).toBe(true);
+    expect(parseServerEnv({ APP_ENV: 'production', ...prod }).apiDocsEnabled).toBe(false);
+    expect(parseServerEnv({ APP_ENV: 'production', ...prod, ENABLE_API_DOCS: 'true' }).apiDocsEnabled).toBe(true);
   });
 
   it('normalises trailing slashes and rejects malformed values', () => {
-    const env = parseServerEnv({ APP_ENV: 'production', API_BASE_URL: 'https://api.shop.in/v1/', NEXT_PUBLIC_SITE_URL: 'https://www.shop.in/' });
-    expect(env.apiBaseUrl).toBe('https://api.shop.in/v1');
+    const env = parseServerEnv({ APP_ENV: 'production', ...supabase, ...proxy, SUPABASE_URL: 'https://abc.supabase.co/', NEXT_PUBLIC_SITE_URL: 'https://www.shop.in/' });
+    expect(env.supabase?.url).toBe('https://abc.supabase.co');
     expect(env.siteUrl).toBe('https://www.shop.in');
-    expect(() => parseServerEnv({ APP_ENV: 'development', API_MODE: 'mock', API_TIMEOUT_MS: '10' })).toThrow(EnvError);
-    expect(() => parseServerEnv({ APP_ENV: 'development', API_MODE: 'mock', ADMIN_SESSION_COOKIE: 'bad name;' })).toThrow(EnvError);
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, API_TIMEOUT_MS: '10' })).toThrow(EnvError);
+    expect(() => parseServerEnv({ APP_ENV: 'development', ...supabase, ADMIN_SESSION_COOKIE: 'bad name;' })).toThrow(EnvError);
   });
 });

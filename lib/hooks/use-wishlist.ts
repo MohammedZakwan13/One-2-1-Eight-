@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
 /**
- * Guest wishlist. This is a non-sensitive shopper preference, so it lives in localStorage
+ * Wishlist. Guests keep it in localStorage (a non-sensitive preference); signed-in customers are synced to the server (see use-wishlist-toggle).
  * (cart, orders and anything price-related are server-owned). Hydration-safe via useSyncExternalStore.
  */
 const KEY = 'o218:wishlist:v1';
@@ -44,5 +44,6 @@ export function useWishlist() {
     write(current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   }, []);
   const clear = useCallback(() => write([]), []);
-  return { ids, toggle, clear };
+  const replace = useCallback((next: string[]) => write(next.slice(0, 200)), []);
+  return { ids, toggle, clear, replace };
 }

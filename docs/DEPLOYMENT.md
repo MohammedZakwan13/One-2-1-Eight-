@@ -16,7 +16,7 @@
 | `REVALIDATE_SECRET` | random ≥ 24 chars | different value |
 | `CSP_EXTRA_*` | payment/analytics origins | same |
 
-   Do **not** set `API_MODE=mock` or any `MOCK_*` variable on Vercel — the app refuses to start with mock mode outside development/test.
+   Set `API_MODE=supabase` (default) plus the `SUPABASE_*` variables from docs/SETUP.md. Mock mode no longer exists.
 4. Deploy. Verify `https://<site>/api/health` (and `?deep=1` once the backend exists), `/robots.txt` (production allows crawling; previews don't) and `/sitemap.xml`.
 5. Backend → frontend purge: configure the backend to call `POST /api/revalidate` (see BACKEND_INTEGRATION §5).
 6. Custom domain + HTTPS in Vercel; add the domain to Search Console after launch.
@@ -43,7 +43,7 @@ docker run -d -p 3000:3000 \
 
 ## CI (GitHub Actions)
 `.github/workflows/ci.yml` runs on pushes/PRs: lint → typecheck → unit tests → build → `npm audit --omit=dev` (high) → Playwright e2e (Chromium) → Docker image build.
-CI uses mock-mode test configuration only; no secrets are required.
+CI uses placeholder configuration only; no secrets are required (unit tests never contact Supabase).
 
 ## Release checklist
 - [ ] All `REMAINING_WORK.md` blockers closed or explicitly accepted
@@ -52,3 +52,11 @@ CI uses mock-mode test configuration only; no secrets are required.
 - [ ] Legal pages published; seller/GST details in the CMS; consent requirements met
 - [ ] Lighthouse/Web Vitals + manual device matrix run on staging
 - [ ] Backups, monitoring/alerting (errors, 5xx rate, payment webhook failures), rollback plan
+
+## Client IP and rate limits (trusted proxy)
+IP rate limits (OTP sends, orders, tracking, newsletter, leads, admin login) use only an IP that a trusted proxy vouches for; `X-Forwarded-For` and `X-Real-IP` from the client are never used.
+- **Cloudflare (proxied DNS or Tunnel):** set `TRUSTED_PROXY=cloudflare` and `TRUSTED_PROXY_SECRET=<random, 24+ chars>`. In Cloudflare add a **Transform Rule → Modify Request Header → Set static** `X-O218-Origin-Secret` = the same value for the zone/hostname. The app then trusts `CF-Connecting-IP` only when that header matches. Rotate by changing both sides.
+- **Prevent direct-origin access:** use a Cloudflare Tunnel with no public inbound port, or firewall the origin to Cloudflare's published IP ranges only. The secret header is the application-level proof; the network rule removes the exposure.
+- **Local development:** `TRUSTED_PROXY=cloudflare` without a secret (development only) trusts `CF-Connecting-IP` from a quick tunnel. Leave it unset to share one bucket.
+- **Vercel (DNS pointing straight at Vercel, no proxy in front):** set `TRUSTED_PROXY=vercel`. Vercel overwrites `X-Forwarded-For` with the connecting client's address; the app trusts it only when the platform sets `VERCEL=1` (never set that yourself) and the value is exactly one valid IP. `X-Real-IP` and `X-Vercel-Forwarded-For` are never used. If a proxy such as Cloudflare is put in front of Vercel, that header holds the proxy's address and every visitor would share a bucket, so do not enable it there.
+- **Other hosts:** not supported. `TRUSTED_PROXY=none` shares one IP bucket, and production refuses to start with it.

@@ -28,13 +28,13 @@ const money = z.number().finite().nonnegative();
 export const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number');
 export const pincodeSchema = z.string().regex(/^[1-9]\d{5}$/, 'Enter a valid 6-digit pincode');
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
+export const paymentMethodSchema = z.enum(['upi', 'card', 'cod']);
+export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
 // ───────────────────────── catalogue ─────────────────────────
 
 export const availabilitySchema = z.object({
   status: z.enum(['in_stock', 'low_stock', 'out_of_stock']),
-  /** Only present when status is `low_stock` (remaining units). Full stock counts are never exposed publicly. */
-  quantity: z.number().int().nonnegative().optional(),
 });
 
 export const variantSchema = z.object({
@@ -66,6 +66,10 @@ export const productSchema = z.object({
   bestSeller: z.boolean(),
   newArrival: z.boolean(),
   luxe: z.boolean(),
+  /** Admin-written display text for the product page (e.g. "Limited drop"). Pure copy: never derived from, or used as, inventory. */
+  stockMessage: z.string().max(160).nullish(),
+  /** Whether the product can be returned after delivery. Defaults to true for products saved before the setting existed. */
+  returnable: z.boolean().optional(),
   variants: z.array(variantSchema).min(1),
   updatedAt: isoDateTime,
 });
@@ -107,6 +111,9 @@ export const storeSettingsSchema = z.object({
   promoText: z.string().max(400),
   announcementEnabled: z.boolean(),
   freeShippingThreshold: money,
+  shippingFee: money,
+  /** A size at or below this REAL quantity is low stock (storefront message and admin dashboard). */
+  lowStockThreshold: z.number().int().min(0).max(1000),
   returnPolicy: z.string().max(2000),
   seoTitle: z.string().max(120),
   seoDescription: z.string().max(320),
@@ -137,6 +144,8 @@ export const storefrontContentSchema = z.object({
   settings: storeSettingsSchema,
   heroSlides: z.array(heroSlideSchema),
   categories: z.array(categorySchema),
+  /** Methods the checkout may offer; online methods appear only when a payment provider is configured. */
+  paymentMethods: z.array(paymentMethodSchema).min(1),
 });
 export type StorefrontContent = z.infer<typeof storefrontContentSchema>;
 
@@ -187,8 +196,9 @@ export const customerSchema = z.object({ id, phone: phoneSchema, name: z.string(
 export type Customer = z.infer<typeof customerSchema>;
 
 export const otpRequestSchema = z.object({ phone: phoneSchema });
-export const otpRequestResponseSchema = z.object({ requestId: id, expiresInSeconds: z.number().int().positive(), resendAfterSeconds: z.number().int().nonnegative() });
-export const otpVerifySchema = z.object({ requestId: id, phone: phoneSchema, otp: z.string().regex(/^\d{6}$/) });
+export const otpRequestResponseSchema = z.object({ requestId: id, expiresInSeconds: z.number().int().positive(), resendAfterSeconds: z.number().int().nonnegative(), widgetId: z.string().min(1), tokenAuth: z.string().min(1) });
+export const otpConfigSchema = z.object({ widgetId: z.string().min(1), tokenAuth: z.string().min(1) });
+export const otpVerifySchema = z.object({ requestId: id, phone: phoneSchema, accessToken: z.string().min(20).max(4096) });
 export const sessionSchema = z.object({ customer: customerSchema });
 export type OtpRequestResponse = z.infer<typeof otpRequestResponseSchema>;
 
@@ -239,9 +249,6 @@ export const addressSchema = z.object({
   pincode: pincodeSchema,
 });
 export const contactSchema = z.object({ name: z.string().trim().min(2).max(120), phone: phoneSchema, email: emailSchema });
-export const paymentMethodSchema = z.enum(['upi', 'card', 'cod']);
-export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
-
 export const createOrderRequestSchema = z.object({
   contact: contactSchema,
   shippingAddress: addressSchema,
@@ -251,6 +258,8 @@ export const createOrderRequestSchema = z.object({
 export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
 
 export const orderLineSchema = z.object({
+  /** order_items.id: what a return request refers to. */
+  id: id.optional(), returnable: z.boolean().optional(), returnedQuantity: z.number().int().nonnegative().optional(),
   productId: id, variantId: id, name: z.string(), image: safeUrl, size: z.string(), color: z.string(),
   quantity: z.number().int().positive(), unitPrice: money, lineTotal: money,
 });
@@ -258,6 +267,19 @@ export const orderStatusSchema = z.enum(['pending_payment', 'confirmed', 'proces
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export const paymentStatusSchema = z.enum(['unpaid', 'pending', 'paid', 'failed', 'cod_pending', 'refunded']);
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
+export const returnStatusSchema = z.enum(['requested', 'approved', 'rejected', 'received', 'refund_pending', 'completed']);
+export const refundSchema = z.object({ amount: z.number(), status: z.enum(['pending', 'completed', 'failed']), reference: z.string().nullable(), method: z.string() });
+export const returnSchema = z.object({
+  id, number: z.string(), orderId: id, orderNumber: z.string(), status: returnStatusSchema, reason: z.string(), adminNote: z.string().nullable(),
+  createdAt: isoDateTime, restocked: z.boolean().optional(),
+  items: z.array(z.object({ orderItemId: id, name: z.string(), size: z.string(), quantity: z.number().int().positive() })),
+  refund: refundSchema.nullable(),
+  /** Only on admin responses. */
+  contact: z.object({ name: z.string(), phone: z.string(), email: z.string() }).optional(),
+});
+export type OrderReturn = z.infer<typeof returnSchema>;
+export const returnListSchema = paginated(returnSchema);
+
 export const orderSchema = z.object({
   id,
   number: z.string(),
@@ -270,6 +292,17 @@ export const orderSchema = z.object({
   contact: contactSchema,
   shippingAddress: addressSchema,
   createdAt: isoDateTime,
+  /** Customer-visible fulfilment timeline. */
+  history: z.array(z.object({ status: orderStatusSchema, at: isoDateTime, note: z.string().nullish() })),
+  shipment: z.object({ carrier: z.string().nullable(), trackingNumber: z.string().nullable(), trackingUrl: z.string().nullable() }).nullable(),
+  /** Server-decided: the customer may cancel (before shipping). */
+  cancellable: z.boolean().optional(),
+  cancelReason: z.string().nullish(),
+  deliveredAt: isoDateTime.nullish(),
+  /** Last moment a return can be requested (delivery + window); null until delivered. */
+  returnableUntil: isoDateTime.nullish(),
+  returns: z.array(returnSchema).optional(),
+  refund: refundSchema.nullish(),
 });
 export type Order = z.infer<typeof orderSchema>;
 
@@ -347,12 +380,37 @@ export const adminProductInputSchema = z.object({
   newArrival: z.boolean(),
   luxe: z.boolean(),
   status: z.enum(['active', 'draft']),
+  stockMessage: z.string().trim().max(160).nullish(),
+  returnable: z.boolean().optional(),
   variants: z.array(z.object({ size: z.string().trim().min(1).max(16), sku: z.string().trim().max(64).nullish(), stock: z.number().int().min(0).max(100_000) })).min(1),
 });
 export type AdminProductInput = z.infer<typeof adminProductInputSchema>;
 
 export const adminOrderListSchema = paginated(orderSchema);
-export const updateOrderStatusSchema = z.object({ status: orderStatusSchema });
+export const cancelOrderRequestSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+export const createReturnRequestSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  items: z.array(z.object({ orderItemId: id, quantity: z.number().int().min(1).max(20) })).min(1).max(20),
+});
+export type CreateReturnRequest = z.infer<typeof createReturnRequestSchema>;
+export const updateReturnSchema = z.object({
+  status: z.enum(['approved', 'rejected', 'received', 'refund_pending', 'completed']),
+  note: z.string().trim().max(500).nullish(),
+  /** Only with status=received: the item was inspected and may be sold again. */
+  restock: z.boolean().optional(),
+  /** Required with status=completed when money is owed: bank/UPI/provider reference proving the refund was paid. */
+  refundReference: z.string().trim().max(120).nullish(),
+});
+export type UpdateReturn = z.infer<typeof updateReturnSchema>;
+export const updateOrderStatusSchema = z.object({
+  status: orderStatusSchema,
+  note: z.string().trim().max(500).nullish(),
+  carrier: z.string().trim().max(80).nullish(),
+  trackingNumber: z.string().trim().max(80).nullish(),
+  trackingUrl: z.string().trim().url().startsWith('https://').max(500).nullish(),
+});
+
+export type UpdateOrderStatus = z.infer<typeof updateOrderStatusSchema>;
 
 export const adminReviewSchema = z.object({
   id, productId: id, productName: z.string(), author: z.string(), rating: z.number().int().min(1).max(5), title: z.string(), body: z.string(),
@@ -368,6 +426,13 @@ export type AdminLead = z.infer<typeof adminLeadSchema>;
 export const adminLeadListSchema = paginated(adminLeadSchema);
 export const updateLeadStatusSchema = z.object({ status: leadStatusSchema });
 
+export const adminCategoryCreateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  /** Optional; derived from the name when omitted. Lower-case words joined by hyphens. */
+  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lower-case letters, numbers and hyphens').max(60).optional(),
+  image: safeUrl,
+  active: z.boolean(),
+});
 export const adminCategoryUpdateSchema = z.object({ name: z.string().trim().min(1).max(80), image: safeUrl, active: z.boolean() });
 export const adminCategoriesSchema = z.object({ items: z.array(categorySchema) });
 
@@ -379,6 +444,8 @@ export const dashboardSummarySchema = z.object({
   grossRevenue: money,
   productCount: z.number().int().nonnegative(),
   lowStockCount: z.number().int().nonnegative(),
+  /** Sizes at or below the low-stock threshold, from the REAL database stock. */
+  lowStockItems: z.array(z.object({ name: z.string(), size: z.string(), sku: z.string(), stock: z.number().int().nonnegative() })),
   newArrivalCount: z.number().int().nonnegative(),
   newLeadCount: z.number().int().nonnegative(),
   pendingReviewCount: z.number().int().nonnegative(),
@@ -389,6 +456,19 @@ export const dashboardSummarySchema = z.object({
   recentOrders: z.array(orderSchema).max(10),
 });
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>;
+
+export const adminPageSchema = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/), title: z.string().trim().min(1).max(160), body: z.string().max(100_000), published: z.boolean(), updatedAt: isoDateTime });
+export type AdminPage = z.infer<typeof adminPageSchema>;
+export const adminPageListSchema = z.object({ items: z.array(adminPageSchema) });
+export const adminPageInputSchema = adminPageSchema.omit({ slug: true, updatedAt: true });
+
+export const uploadResponseSchema = z.object({ path: z.string(), url: safeUrl });
+
+export const wishlistSchema = z.object({ productIds: z.array(id) });
+export const savedAddressInputSchema = addressSchema.extend({ label: z.string().trim().min(1).max(40), name: z.string().trim().min(2).max(120), phone: phoneSchema, isDefault: z.boolean().default(false) });
+export type SavedAddressInput = z.input<typeof savedAddressInputSchema>;
+export const savedAddressSchema = savedAddressInputSchema.extend({ id });
+export const savedAddressListSchema = z.object({ items: z.array(savedAddressSchema) });
 
 export const bulkFlagRequestSchema = z.object({ flag: z.enum(['luxe', 'bestSeller', 'newArrival']), value: z.boolean() });
 

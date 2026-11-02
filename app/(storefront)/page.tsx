@@ -16,10 +16,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Page() {
-  const [{ heroSlides, categories }, featured, latest] = await Promise.all([
+  const [{ heroSlides, categories }, featured, latest, luxe] = await Promise.all([
     getStorefront(),
     serverApi.catalog.listProducts({ collection: 'best-sellers', pageSize: 4 }),
     serverApi.catalog.listProducts({ collection: 'new-arrivals', pageSize: 4 }),
+    // Existing LUXE definition (active + luxe flag). 200 is the API's page cap; a failure only hides the rail, never the page.
+    serverApi.catalog.listProducts({ collection: 'one-2-1-eight-luxe', pageSize: 200 }).catch(() => null),
   ]);
-  return <HomePage heroSlides={heroSlides} categories={categories} featured={featured.items} latest={latest.items} />;
+  return <HomePage heroSlides={heroSlides} categories={categories} featured={featured.items} latest={latest.items} luxe={luxe?.items ?? []} />;
 }

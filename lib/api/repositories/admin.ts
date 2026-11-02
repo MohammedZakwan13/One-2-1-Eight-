@@ -1,12 +1,48 @@
+import type { z } from 'zod';
+import { ApiError, errorFromResponse } from '@/lib/api/errors';
 import type { Caller } from '@/lib/api/http';
 import {
   adminCategoriesSchema, adminContentSchema, adminLeadListSchema, adminLeadSchema, adminLoginResponseSchema, adminMeSchema,
-  adminOrderListSchema, adminProductListSchema, adminProductSchema, adminReviewListSchema, adminReviewSchema,
-  dashboardSummarySchema, heroSlideSchema, orderSchema, storeSettingsSchema, categorySchema,
-  type AdminProductInput, type StoreSettings, type HeroSlide,
+  adminOrderListSchema, adminPageListSchema, adminPageSchema, adminProductListSchema, adminProductSchema, adminReviewListSchema, adminReviewSchema,
+  apiErrorBodySchema, dashboardSummarySchema, heroSlideSchema, orderSchema, storeSettingsSchema, categorySchema, uploadResponseSchema,
+  type AdminProductInput, type StoreSettings, type HeroSlide, type UpdateOrderStatus,
+  returnListSchema, returnSchema, type UpdateReturn,
 } from '@/lib/api/schemas';
 
 const ADMIN_PAGE = { page: 1, pageSize: 200 };
+
+type UploadResult = z.infer<typeof uploadResponseSchema>;
+
+/** Multipart upload via XHR so the UI can show real progress. CSRF token is fetched from the same-origin API. */
+async function uploadImage(file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<UploadResult> {
+  const csrf = await fetch('/api/v1/csrf-token', { credentials: 'same-origin', cache: 'no-store' }).then(response => response.json() as Promise<{ token: string }>);
+  return new Promise<UploadResult>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', '/api/v1/admin/uploads');
+    request.setRequestHeader('X-CSRF-Token', csrf.token);
+    request.setRequestHeader('Accept', 'application/json');
+    request.withCredentials = true;
+    request.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100)); };
+    request.onerror = () => reject(new ApiError(503, 'network_error', 'We could not reach the server. Check your connection and try again.'));
+    request.onabort = () => reject(new DOMException('Aborted', 'AbortError'));
+    request.onload = () => {
+      let body: unknown = null;
+      try { body = JSON.parse(request.responseText); } catch { /* non-JSON error body */ }
+      if (request.status >= 200 && request.status < 300) {
+        const parsed = uploadResponseSchema.safeParse(body);
+        if (parsed.success) resolve(parsed.data);
+        else reject(new ApiError(502, 'invalid_response', 'We received an unexpected response from the server.'));
+      } else {
+        const parsed = apiErrorBodySchema.safeParse(body);
+        reject(errorFromResponse(request.status, parsed.success ? parsed.data : null));
+      }
+    };
+    signal?.addEventListener('abort', () => request.abort());
+    const form = new FormData();
+    form.append('file', file);
+    request.send(form);
+  });
+}
 
 /** Everything under `/admin/*` requires a server-validated admin session (HttpOnly cookie) plus a CSRF token on writes. */
 export const adminRepository = (call: Caller) => ({
@@ -26,12 +62,16 @@ export const adminRepository = (call: Caller) => ({
   },
   categories: {
     list: () => call('/admin/categories', adminCategoriesSchema),
+    create: (input: { name: string; slug?: string; image: string; active: boolean }) => call('/admin/categories', categorySchema, { method: 'POST', body: input }),
+    remove: (id: string) => call(`/admin/categories/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
     update: (id: string, input: { name: string; image: string; active: boolean }) => call(`/admin/categories/${encodeURIComponent(id)}`, categorySchema, { method: 'PUT', body: input }),
   },
   orders: {
     list: () => call('/admin/orders', adminOrderListSchema, { query: ADMIN_PAGE }),
-    updateStatus: (id: string, status: string) => call(`/admin/orders/${encodeURIComponent(id)}/status`, orderSchema, { method: 'PATCH', body: { status } }),
+    updateStatus: (id: string, update: UpdateOrderStatus) => call(`/admin/orders/${encodeURIComponent(id)}/status`, orderSchema, { method: 'PATCH', body: update }),
     exportUrl: '/api/v1/admin/orders/export.csv',
+    listReturns: () => call('/admin/returns', returnListSchema, { query: ADMIN_PAGE }),
+    updateReturn: (id: string, update: UpdateReturn) => call(`/admin/returns/${encodeURIComponent(id)}`, returnSchema, { method: 'PATCH', body: update }),
   },
   reviews: {
     list: () => call('/admin/reviews', adminReviewListSchema, { query: ADMIN_PAGE }),
@@ -46,5 +86,13 @@ export const adminRepository = (call: Caller) => ({
     get: () => call('/admin/content', adminContentSchema),
     updateSettings: (settings: StoreSettings) => call('/admin/content/settings', storeSettingsSchema, { method: 'PUT', body: settings }),
     updateHeroSlide: (id: string, slide: Omit<HeroSlide, 'id'>) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}`, heroSlideSchema, { method: 'PUT', body: slide }),
+    pages: () => call('/admin/pages', adminPageListSchema),
+    savePage: (slug: string, page: { title: string; body: string; published: boolean }) => call(`/admin/pages/${encodeURIComponent(slug)}`, adminPageSchema, { method: 'PUT', body: page }),
+    removePage: (slug: string) => call(`/admin/pages/${encodeURIComponent(slug)}`, null, { method: 'DELETE' }),
+  },
+  uploads: {
+    upload: uploadImage,
+    remove: (path: string) => call('/admin/uploads', null, { method: 'DELETE', query: { path } }),
+    cleanup: () => call('/admin/uploads/cleanup', null, { method: 'POST' }),
   },
 });

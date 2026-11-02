@@ -6,7 +6,7 @@ import { absoluteUrl, jsonLd } from '@/lib/site';
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   // Render per request (data is still cached by the fetch layer) so `next build` never depends on the backend being reachable.
   await connection();
-  const [{ settings, categories }, terms, privacy] = await Promise.all([getStorefront(), getLegalPage('terms'), getLegalPage('privacy')]);
+  const [{ settings, categories, paymentMethods }, terms, privacy] = await Promise.all([getStorefront(), getLegalPage('terms'), getLegalPage('privacy')]);
   const legalPages = [terms, privacy].filter((page): page is NonNullable<typeof page> => Boolean(page)).map(page => ({ slug: page.slug, title: page.title }));
 
   const organization = {
@@ -22,7 +22,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(organization) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(website) }} />
-      <StorefrontShell data={{ settings, categories, legalPages }}>{children}</StorefrontShell>
+      <StorefrontShell data={{ settings, categories, paymentMethods, legalPages }}>{children}</StorefrontShell>
     </>
   );
 }

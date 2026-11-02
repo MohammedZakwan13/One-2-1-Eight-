@@ -12,14 +12,20 @@ export type HeaderEntry = { key: string; value: string };
 const list = (value: string | undefined) => (value ?? '').split(/\s+/).map(item => item.trim()).filter(Boolean);
 
 export function buildCsp(env: Record<string, string | undefined>, isDev: boolean): string {
-  const scriptSrc = ["'self'", "'unsafe-inline'", ...(isDev ? ["'unsafe-eval'"] : []), ...list(env.CSP_EXTRA_SCRIPT_SRC)];
-  const connectSrc = ["'self'", ...(isDev ? ['ws:', 'wss:'] : []), ...list(env.CSP_EXTRA_CONNECT_SRC)];
+  // Razorpay Checkout is allowed only when the payment provider is actually configured.
+  const razorpay = Boolean(env.RAZORPAY_KEY_ID);
+  // The MSG91 OTP Widget SDK is loaded (and talks to MSG91) from the browser only when the widget is configured.
+  const msg91 = Boolean(env.MSG91_WIDGET_ID);
+  // SDK file: verify.msg91.com. Its API calls: control.msg91.com (+ msg91backup.phone91.com as its built-in fallback). CAPTCHA is hCaptcha (widget captcha_type 1), whose documented sources are hcaptcha.com and *.hcaptcha.com.
+  const hcaptcha = ['https://hcaptcha.com', 'https://*.hcaptcha.com'];
+  const scriptSrc = ["'self'", "'unsafe-inline'", ...(isDev ? ["'unsafe-eval'"] : []), ...(razorpay ? ['https://checkout.razorpay.com'] : []), ...(msg91 ? ['https://verify.msg91.com', ...hcaptcha] : []), ...list(env.CSP_EXTRA_SCRIPT_SRC)];
+  const connectSrc = ["'self'", ...(isDev ? ['ws:', 'wss:'] : []), ...(razorpay ? ['https://api.razorpay.com', 'https://lumberjack.razorpay.com'] : []), ...(msg91 ? ['https://control.msg91.com', 'https://msg91backup.phone91.com', ...hcaptcha] : []), ...list(env.CSP_EXTRA_CONNECT_SRC)];
   const imgSrc = ["'self'", 'data:', 'blob:', 'https:', ...list(env.CSP_EXTRA_IMG_SRC)];
-  const frameSrc = list(env.CSP_EXTRA_FRAME_SRC);
+  const frameSrc = [...(razorpay ? ['https://api.razorpay.com', 'https://checkout.razorpay.com'] : []), ...(msg91 ? hcaptcha : []), ...list(env.CSP_EXTRA_FRAME_SRC)];
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
-    "style-src 'self' 'unsafe-inline'",
+    `style-src 'self' 'unsafe-inline' ${msg91 ? hcaptcha.join(' ') : ''}`.trim(),
     `img-src ${imgSrc.join(' ')}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc.join(' ')}`,

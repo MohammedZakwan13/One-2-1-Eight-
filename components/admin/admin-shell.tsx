@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowUpRight, ChevronRight, Menu } from 'lucide-react';
-import { useRuntimeConfig, useUi } from '@/components/providers/app-providers';
+import { useUi } from '@/components/providers/app-providers';
 import { AdminSidebar } from '@/components/admin/sidebar';
+import { ConfirmProvider } from '@/components/admin/confirm-dialog';
 import { RouteLink } from '@/components/ui/route-link';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
@@ -35,7 +36,6 @@ export function AdminShell({ admin, children }: { admin: AdminUser; children: Re
   const router = useRouter();
   const pathname = usePathname() || '/admin';
   const { notify } = useUi();
-  const { mock } = useRuntimeConfig();
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const activeTab = tabFor(pathname);
   const go = (tab: string) => { setMobileSidebar(false); router.push(ADMIN_TABS[tab as AdminTab] ?? '/admin'); };
@@ -53,7 +53,7 @@ export function AdminShell({ admin, children }: { admin: AdminUser; children: Re
   const value = useMemo(() => ({ admin, go }), [admin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <AdminContext.Provider value={value}>
+    <AdminContext.Provider value={value}><ConfirmProvider>
       <main className="admin-app">
         <div className={`admin-sidebar-wrap ${mobileSidebar ? 'is-open' : ''}`}><AdminSidebar activeTab={activeTab} setActiveTab={go} onLogout={logout} /></div>
         {mobileSidebar && <button className="admin-mobile-backdrop" aria-label="Close admin menu" onClick={() => setMobileSidebar(false)} />}
@@ -61,12 +61,12 @@ export function AdminShell({ admin, children }: { admin: AdminUser; children: Re
           <header className="admin-topbar">
             <button className="admin-mobile-menu" onClick={() => setMobileSidebar(!mobileSidebar)} aria-label="Open admin menu"><Menu size={20} /></button>
             <div className="admin-topbar-breadcrumb"><span>WORKSPACE</span><ChevronRight size={13} /><strong>{TITLES[activeTab]}</strong></div>
-            <div className="admin-topbar-right"><span className="admin-live-dot" /> <span>Storefront: <strong>{mock ? 'Development mock' : 'Live'}</strong></span><RouteLink href="/" target="_blank" className="admin-view-store"><ArrowUpRight size={15} /> View store</RouteLink><span className="admin-topbar-avatar" title={admin.email}>{(admin.name || admin.email).charAt(0).toUpperCase()}</span></div>
+            <div className="admin-topbar-right"><span className="admin-live-dot" /> <span>Storefront: <strong>Live</strong></span><RouteLink href="/" target="_blank" className="admin-view-store"><ArrowUpRight size={15} /> View store</RouteLink><span className="admin-topbar-avatar" title={admin.email}>{(admin.name || admin.email).charAt(0).toUpperCase()}</span></div>
           </header>
           {children}
-          <footer className="admin-app-footer"><span>ONE 2 1 EIGHT / COMMERCE STUDIO</span><span>{mock ? 'DEVELOPMENT MOCK' : 'ADMIN CONSOLE'}</span><span>© {new Date().getFullYear()}</span></footer>
+          <footer className="admin-app-footer"><span>ONE 2 1 EIGHT / COMMERCE STUDIO</span><span>ADMIN CONSOLE</span><span>© {new Date().getFullYear()}</span></footer>
         </section>
       </main>
-    </AdminContext.Provider>
+    </ConfirmProvider></AdminContext.Provider>
   );
 }
