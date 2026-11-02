@@ -11388,6 +11388,15 @@ button {
   background: rgba(202, 166, 111, .16);
 }
 
+.social-links a[aria-label="Instagram"] {
+  color: #f7a8c4;
+}
+
+.social-links a[aria-label="Instagram"]:hover {
+  color: #ffc2d6;
+  background: rgba(225, 48, 108, .16);
+}
+
 /* The Buy Now action uses the same size validation and cart state as Add to Bag. */
 .buy-now-button {
   width: 100%;
