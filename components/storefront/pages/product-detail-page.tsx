@@ -109,11 +109,29 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
       setDeliveryMessage(errorMessage(error));
     }
   };
-  const galleryImages = product.images.length ? product.images : [product.images[0]];
+  const galleryImages = (product.images || []).filter(Boolean);
+  const hasMultipleImages = galleryImages.length > 1;
+  const currentImage = galleryImages[activeImage % Math.max(1, galleryImages.length)] || '';
   return <><main className="product-page">
     <div className="breadcrumbs product-breadcrumbs"><RouteLink href="/" onClick={onTransition}>Home</RouteLink><span>/</span><RouteLink href={`/collections/${slugify(product.category)}`} onClick={onTransition}>{product.category}</RouteLink><span>/</span><span>{product.name}</span></div>
     <div className="product-layout">
-      <section className="product-gallery" aria-label="Product images"><div className="gallery-main"><SmartImage src={galleryImages[activeImage % galleryImages.length]} alt={`${product.name} view ${activeImage + 1}`} eager /><span className="gallery-image-number">0{activeImage + 1} <i>/</i> 0{galleryImages.length}</span><button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={20} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button></div><div className="gallery-thumbnails">{galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => setActiveImage(index)} aria-label={`View product image ${index + 1}`}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}</div><div className="gallery-mobile-dots">{galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} onClick={() => setActiveImage(idx)} />)}</div></section>
+      <section className={`product-gallery ${hasMultipleImages ? 'has-thumbnails' : 'single-image'}`} aria-label="Product images">
+        <div className="gallery-main">
+          <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager />
+          {hasMultipleImages && <span className="gallery-image-number">0{activeImage + 1} <i>/</i> 0{galleryImages.length}</span>}
+          <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={20} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+        </div>
+        {hasMultipleImages && (
+          <div className="gallery-thumbnails">
+            {galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => setActiveImage(index)} aria-label={`View product image ${index + 1}`}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}
+          </div>
+        )}
+        {hasMultipleImages && (
+          <div className="gallery-mobile-dots">
+            {galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} onClick={() => setActiveImage(idx)} />)}
+          </div>
+        )}
+      </section>
       <section className="product-detail-panel"><div className="detail-label-row"><span className="eyebrow">{product.luxe ? 'ONE 2 1 EIGHT LUXE' : product.newArrival ? 'NEW SEASON / 1218' : 'THE 1218 ESSENTIALS'}</span>{product.badge && <span className="detail-badge">{product.badge}</span>}</div><h1>{product.name}</h1><div className="detail-rating-row"><span className="star-rating"><Star size={14} fill="currentColor" /> {averageRating}</span><span>{displayedReviewCount} reviews</span><button onClick={() => document.getElementById('product-reviews')?.scrollIntoView({ behavior: 'smooth' })}>READ REVIEWS <ArrowDownRight size={13} /></button></div><div className="detail-price-row"><strong>{money(product.price)}</strong>{product.compareAt > product.price && <><del>{money(product.compareAt)}</del><span className="detail-discount">SAVE {discount}%</span></>}</div><p className="tax-note">Inclusive of all taxes</p>{settings.productOfferCode && <div className="detail-offer-strip"><span>{settings.productOfferCode}</span><p>{settings.productOfferText}</p><button onClick={() => { const code = settings.productOfferCode ?? ''; navigator.clipboard?.writeText(code).then(() => notify(`${code} copied. Use it in your bag.`), () => notify(`Use code ${code} in your bag.`)); }}>COPY</button></div>}
         <div className="detail-colour-block"><div className="detail-section-label"><span>COLOUR</span><strong>{product.color}</strong></div><div className="detail-colour-swatch"><button className="active" style={{ background: product.colorHex }} aria-label={product.color} /><span>{product.color}</span></div></div>
         <div className="detail-size-block" id="size-picker"><div className="detail-section-label"><span>SELECT SIZE</span><button type="button" className="size-guide-link" onClick={() => setSizeGuide(true)}>SIZE GUIDE <ArrowUpRight size={14} /></button></div><div className="size-options" role="group" aria-label="Choose a size">{product.variants.map(variant => { const soldOut = variant.availability.status === 'out_of_stock'; return <button key={variant.id} type="button" disabled={soldOut} aria-pressed={selectedSize === variant.size} aria-label={soldOut ? `Size ${variant.size}, sold out` : `Size ${variant.size}`} className={`${selectedSize === variant.size ? 'selected' : ''} ${variant.availability.status === 'low_stock' ? 'low-stock' : ''}`} onClick={() => setSelectedSize(variant.size)}>{variant.size}</button>; })}</div>{product.stockMessage && <p className="stock-note" role="status">{product.stockMessage}</p>}<div className="fit-suggestion"><Sparkles size={14} /><span>Designed for a {product.fit.toLowerCase()} silhouette</span></div></div>
