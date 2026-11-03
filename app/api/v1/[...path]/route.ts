@@ -72,6 +72,19 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
 
   if (upstream.status >= 300 && upstream.status < 400) return error(502, 'upstream_redirect', 'Unexpected response from the store.', requestId);
 
+  if (upstream.status < 400 && method !== 'GET') {
+    try {
+      const { revalidateTag } = await import('next/cache');
+      if (upstreamPath.startsWith('/admin/content') || upstreamPath.startsWith('/admin/categories')) {
+        revalidateTag('content');
+      } else if (upstreamPath.startsWith('/admin/products')) {
+        revalidateTag('products');
+      }
+    } catch {
+      // Revalidation may be unavailable outside a Next.js server context.
+    }
+  }
+
   const responseHeaders = new Headers({ 'Cache-Control': 'no-store', 'x-request-id': requestId });
   for (const name of ['content-type', 'content-disposition', 'retry-after']) {
     const value = upstream.headers.get(name);

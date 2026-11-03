@@ -105,6 +105,34 @@ export type InventoryAvailability = z.infer<typeof inventoryAvailabilitySchema>;
 
 // ───────────────────────── content / CMS ─────────────────────────
 
+export const instagramUrlSchema = z
+  .string()
+  .trim()
+  .url()
+  .startsWith('https://')
+  .refine(
+    value => {
+      try {
+        const u = new URL(value);
+        return (
+          u.hostname === 'instagram.com' ||
+          u.hostname === 'www.instagram.com' ||
+          u.hostname.endsWith('.instagram.com')
+        );
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Must be an HTTPS Instagram URL (e.g. https://www.instagram.com/your-handle)' }
+  )
+  .nullish();
+
+export const whatsappNumberSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{10,15}$/, 'WhatsApp number must be 10 to 15 digits with country code')
+  .nullish();
+
 export const storeSettingsSchema = z.object({
   brandName: z.string().min(1).max(80),
   brandLine: z.string().max(160),
@@ -119,8 +147,8 @@ export const storeSettingsSchema = z.object({
   seoDescription: z.string().max(320),
   contactEmail: emailSchema,
   contactPhone: z.string().max(32),
-  instagramUrl: z.string().url().startsWith('https://').nullish(),
-  whatsappNumber: z.string().regex(/^\d{10,15}$/).nullish(),
+  instagramUrl: instagramUrlSchema,
+  whatsappNumber: whatsappNumberSchema,
   /** Optional offer strip on product pages. The code must exist as a coupon in the backend. */
   productOfferCode: z.string().max(40).nullish(),
   productOfferText: z.string().max(160).nullish(),

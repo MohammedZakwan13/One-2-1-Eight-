@@ -25,7 +25,7 @@ export function AdminSettings() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!draft) return;
-    const parsed = storeSettingsSchema.safeParse({ ...draft, productOfferCode: draft.productOfferCode || null, productOfferText: draft.productOfferText || null, instagramUrl: draft.instagramUrl || null, whatsappNumber: draft.whatsappNumber || null });
+    const parsed = storeSettingsSchema.safeParse({ ...draft, productOfferCode: draft.productOfferCode?.trim() || null, productOfferText: draft.productOfferText?.trim() || null, instagramUrl: draft.instagramUrl?.trim() || null, whatsappNumber: draft.whatsappNumber?.trim() || null });
     if (!parsed.success) { setErrors(parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`)); return; }
     setErrors([]);
     save.mutate(parsed.data);
