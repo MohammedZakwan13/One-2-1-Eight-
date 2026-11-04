@@ -70,7 +70,7 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-        echo "187.127.179.43 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBvvimsZNjZpPNVW4RXtidpZGryj9EiQeQJX5yJpNB1z" >> ~/.ssh/known_hosts
+          echo "187.127.179.43 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBvvimsZNjZpPNVW4RXtidpZGryj9EiQeQJX5yJpNB1z" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
