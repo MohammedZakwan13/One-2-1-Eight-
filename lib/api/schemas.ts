@@ -70,6 +70,12 @@ export const productSchema = z.object({
   stockMessage: z.string().max(160).nullish(),
   /** Whether the product can be returned after delivery. Defaults to true for products saved before the setting existed. */
   returnable: z.boolean().optional(),
+  /** Whether the product can be exchanged after delivery. */
+  exchangeable: z.boolean().optional(),
+  /** Whether Cash on Delivery is allowed for this product. */
+  codEnabled: z.boolean().optional(),
+  /** Whether Online Payment (UPI, Card) is allowed for this product. */
+  onlinePaymentEnabled: z.boolean().optional(),
   variants: z.array(variantSchema).min(1),
   updatedAt: isoDateTime,
 });
@@ -248,6 +254,10 @@ export const cartLineSchema = z.object({
   /** Server-side cap for this line (available stock or purchase limit). */
   maxQuantity: z.number().int().nonnegative(),
   issue: z.enum(['out_of_stock', 'quantity_reduced', 'price_changed']).nullish(),
+  returnable: z.boolean().optional(),
+  exchangeable: z.boolean().optional(),
+  codEnabled: z.boolean().optional(),
+  onlinePaymentEnabled: z.boolean().optional(),
 });
 export const cartTotalsSchema = z.object({ subtotal: money, discount: money, shipping: money, total: money });
 export const cartSchema = z.object({
@@ -259,6 +269,8 @@ export const cartSchema = z.object({
   freeShippingThreshold: money.nullable(),
   /** Human-readable notices from the server (e.g. "Quantity reduced to available stock"). */
   messages: z.array(z.string()),
+  allowedPaymentMethods: z.array(paymentMethodSchema).optional(),
+  paymentConflict: z.boolean().optional(),
 });
 export type Cart = z.infer<typeof cartSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
@@ -287,7 +299,7 @@ export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
 
 export const orderLineSchema = z.object({
   /** order_items.id: what a return request refers to. */
-  id: id.optional(), returnable: z.boolean().optional(), returnedQuantity: z.number().int().nonnegative().optional(),
+  id: id.optional(), returnable: z.boolean().optional(), exchangeable: z.boolean().optional(), returnedQuantity: z.number().int().nonnegative().optional(),
   productId: id, variantId: id, name: z.string(), image: safeUrl, size: z.string(), color: z.string(),
   quantity: z.number().int().positive(), unitPrice: money, lineTotal: money,
 });
@@ -410,7 +422,13 @@ export const adminProductInputSchema = z.object({
   status: z.enum(['active', 'draft']),
   stockMessage: z.string().trim().max(160).nullish(),
   returnable: z.boolean().optional(),
+  exchangeable: z.boolean().optional(),
+  codEnabled: z.boolean().optional(),
+  onlinePaymentEnabled: z.boolean().optional(),
   variants: z.array(z.object({ size: z.string().trim().min(1).max(16), sku: z.string().trim().max(64).nullish(), stock: z.number().int().min(0).max(100_000) })).min(1),
+}).refine(data => data.codEnabled !== false || data.onlinePaymentEnabled !== false, {
+  message: 'At least one payment method (Cash on Delivery or Online Payment) must be enabled.',
+  path: ['paymentMethods'],
 });
 export type AdminProductInput = z.infer<typeof adminProductInputSchema>;
 

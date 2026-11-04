@@ -9,7 +9,7 @@ import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { Footer } from '@/components/storefront/footer';
-import { money, slugify } from '@/lib/format';
+import { formatProductPaymentNote, formatProductPolicyBadge, formatProductShippingPolicy, money, slugify } from '@/lib/format';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
@@ -80,7 +80,16 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
     return () => { document.body.style.overflow = oldOverflow; window.removeEventListener('keydown', closeOnEscape); };
   }, [sizeGuide]);
   const discount = discountPercent(product);
+  const isPurchasable = (product.codEnabled !== false) || (product.onlinePaymentEnabled !== false);
+  const policyBadge = formatProductPolicyBadge(product);
+  const paymentNote = formatProductPaymentNote(product);
+  const shippingPolicyContent = formatProductShippingPolicy(product, settings);
+
   const add = (goToCheckout = false) => {
+    if (!isPurchasable) {
+      notify('This product is currently not available for purchase.');
+      return;
+    }
     if (!selectedSize) {
       notify('Choose your size to continue.');
       document.getElementById('size-picker')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -135,13 +144,20 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
       <section className="product-detail-panel"><div className="detail-label-row"><span className="eyebrow">{product.luxe ? 'ONE 2 1 EIGHT LUXE' : product.newArrival ? 'NEW SEASON / 1218' : 'THE 1218 ESSENTIALS'}</span>{product.badge && <span className="detail-badge">{product.badge}</span>}</div><h1>{product.name}</h1><div className="detail-rating-row"><span className="star-rating"><Star size={14} fill="currentColor" /> {averageRating}</span><span>{displayedReviewCount} reviews</span><button onClick={() => document.getElementById('product-reviews')?.scrollIntoView({ behavior: 'smooth' })}>READ REVIEWS <ArrowDownRight size={13} /></button></div><div className="detail-price-row"><strong>{money(product.price)}</strong>{product.compareAt > product.price && <><del>{money(product.compareAt)}</del><span className="detail-discount">SAVE {discount}%</span></>}</div><p className="tax-note">Inclusive of all taxes</p>{settings.productOfferCode && <div className="detail-offer-strip"><span>{settings.productOfferCode}</span><p>{settings.productOfferText}</p><button onClick={() => { const code = settings.productOfferCode ?? ''; navigator.clipboard?.writeText(code).then(() => notify(`${code} copied. Use it in your bag.`), () => notify(`Use code ${code} in your bag.`)); }}>COPY</button></div>}
         <div className="detail-colour-block"><div className="detail-section-label"><span>COLOUR</span><strong>{product.color}</strong></div><div className="detail-colour-swatch"><button className="active" style={{ background: product.colorHex }} aria-label={product.color} /><span>{product.color}</span></div></div>
         <div className="detail-size-block" id="size-picker"><div className="detail-section-label"><span>SELECT SIZE</span><button type="button" className="size-guide-link" onClick={() => setSizeGuide(true)}>SIZE GUIDE <ArrowUpRight size={14} /></button></div><div className="size-options" role="group" aria-label="Choose a size">{product.variants.map(variant => { const soldOut = variant.availability.status === 'out_of_stock'; return <button key={variant.id} type="button" disabled={soldOut} aria-pressed={selectedSize === variant.size} aria-label={soldOut ? `Size ${variant.size}, sold out` : `Size ${variant.size}`} className={`${selectedSize === variant.size ? 'selected' : ''} ${variant.availability.status === 'low_stock' ? 'low-stock' : ''}`} onClick={() => setSelectedSize(variant.size)}>{variant.size}</button>; })}</div>{product.stockMessage && <p className="stock-note" role="status">{product.stockMessage}</p>}<div className="fit-suggestion"><Sparkles size={14} /><span>Designed for a {product.fit.toLowerCase()} silhouette</span></div></div>
-        <button className="button button-dark add-to-bag-button" onClick={() => add()}>ADD TO BAG <span>{money(product.price)}</span><ArrowRight size={17} /></button>
-        <button className="button buy-now-button" onClick={() => add(true)}>BUY NOW <span>{money(product.price)}</span><ArrowRight size={17} /></button>
-        <p className="secure-note"><ShieldCheck size={14} /> Secure checkout · {product.returnable === false ? 'Non-returnable item' : 'Easy returns'}</p>
+        {isPurchasable ? (
+          <>
+            <button className="button button-dark add-to-bag-button" onClick={() => add()}>ADD TO BAG <span>{money(product.price)}</span><ArrowRight size={17} /></button>
+            <button className="button buy-now-button" onClick={() => add(true)}>BUY NOW <span>{money(product.price)}</span><ArrowRight size={17} /></button>
+          </>
+        ) : (
+          <button className="button button-dark add-to-bag-button" disabled style={{ opacity: 0.6, cursor: 'not-allowed' }}>CURRENTLY UNAVAILABLE</button>
+        )}
+        <p className="secure-note"><ShieldCheck size={14} /> Secure checkout · {policyBadge}</p>
+        <p className="secure-note" style={{ margin: '-16px 0 20px', color: isPurchasable ? '#7e8078' : '#e06c75', fontSize: '9px', letterSpacing: '0.04em' }}>{paymentNote}</p>
         <form className="delivery-check" onSubmit={checkDelivery}><label htmlFor="delivery-pin"><MapPin size={15} /> DELIVERY CHECK</label><div className="pin-input-row"><input id="delivery-pin" inputMode="numeric" maxLength={6} value={deliveryPin} onChange={e => { setDeliveryPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeliveryMessage(''); }} placeholder="Enter 6-digit pincode" /><button type="submit">CHECK <ArrowRight size={14} /></button></div>{deliveryMessage && <p className={`delivery-response ${deliveryMessage.startsWith('Good') ? 'available' : 'unavailable'}`}>{deliveryMessage}</p>}</form>
         <div className="product-accordions">{[
           { id: 'description', title: 'DESCRIPTION & FIT', content: <><p>{product.description}</p><ul><li>Fit: {product.fit}</li><li>Material: {product.material}</li><li>Model is styled for an editorial look; use the size guide to select your preferred fit.</li></ul></> },
-          { id: 'shipping', title: 'SHIPPING & RETURNS', content: <p>{product.returnable === false ? 'This product is non-returnable and cannot be returned once delivered. ' : ''}{settings.returnPolicy} Complimentary shipping over {money(settings.freeShippingThreshold)}. Delivery timelines shown after a valid pincode check are estimates.</p> },
+          { id: 'shipping', title: 'SHIPPING & RETURNS', content: <p>{shippingPolicyContent}</p> },
           { id: 'care', title: 'CARE GUIDE', content: <p>Wash inside out with similar colours. Use a gentle cold wash, avoid bleach and tumble drying, and dry in shade to help preserve colour and shape.</p> },
         ].map(item => <div className={`product-accordion ${activeAccordion === item.id ? 'open' : ''}`} key={item.id}><button onClick={() => setActiveAccordion(current => current === item.id ? '' : item.id)}><span>{item.title}</span>{activeAccordion === item.id ? <Minus size={17} /> : <Plus size={17} />}</button>{activeAccordion === item.id && <div className="accordion-content">{item.content}</div>}</div>)}</div>
       </section>

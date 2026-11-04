@@ -70,3 +70,53 @@ export function formatInstagramUrl(url: string | null | undefined): string | nul
     return null;
   }
 }
+
+/**
+ * Generates the Shipping & Returns policy content dynamically based on product returnable/exchangeable settings.
+ */
+export function formatProductShippingPolicy(
+  product: { returnable?: boolean; exchangeable?: boolean },
+  settings: { returnPolicy?: string; freeShippingThreshold?: number }
+): string {
+  const isReturnable = product.returnable !== false;
+  const isExchangeable = product.exchangeable !== undefined ? product.exchangeable : isReturnable;
+  const threshold = settings.freeShippingThreshold ?? 1499;
+  const shippingText = `Complimentary shipping over ₹${threshold.toLocaleString('en-IN')}. Delivery timelines shown after a valid pincode check are estimates.`;
+
+  if (isReturnable && isExchangeable) {
+    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
+    return `Eligible for returns and size/colour exchanges.${policy} ${shippingText}`;
+  }
+  if (isReturnable && !isExchangeable) {
+    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
+    return `Eligible for returns only (exchanges are not offered for this product).${policy} ${shippingText}`;
+  }
+  if (!isReturnable && isExchangeable) {
+    return `Eligible for size and colour exchanges only within 7 days of delivery. This product is non-returnable and cannot be returned once delivered. Items must be unworn, unwashed and in their original packaging. ${shippingText}`;
+  }
+  return `This product is non-returnable and non-exchangeable. ${shippingText}`;
+}
+
+/**
+ * Returns a concise trust badge string reflecting product return and exchange eligibility.
+ */
+export function formatProductPolicyBadge(product: { returnable?: boolean; exchangeable?: boolean }): string {
+  const isReturnable = product.returnable !== false;
+  const isExchangeable = product.exchangeable !== undefined ? product.exchangeable : isReturnable;
+  if (isReturnable && isExchangeable) return 'Easy returns & exchanges';
+  if (isReturnable && !isExchangeable) return 'Easy returns';
+  if (!isReturnable && isExchangeable) return 'Exchanges only';
+  return 'Non-returnable, non-exchangeable';
+}
+
+/**
+ * Returns customer-facing payment eligibility text for a product.
+ */
+export function formatProductPaymentNote(product: { codEnabled?: boolean; onlinePaymentEnabled?: boolean }): string {
+  const cod = product.codEnabled !== false;
+  const online = product.onlinePaymentEnabled !== false;
+  if (cod && online) return 'Cash on delivery & online payment available';
+  if (cod && !online) return 'Cash on delivery only';
+  if (!cod && online) return 'Online payment only (Cash on delivery unavailable)';
+  return 'Currently unavailable for purchase';
+}

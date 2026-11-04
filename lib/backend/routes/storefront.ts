@@ -190,9 +190,12 @@ route('GET', '/cart', async ctx => (await priceCart(await cartFor(ctx))).cart);
 route('POST', '/cart/items', async ctx => {
   const cartId = await cartFor(ctx);
   const { variantId, quantity } = await ctx.body(addCartItemSchema);
-  const { data: variant } = await db().from('product_variants').select('id, size, stock, active, products(name, status)').eq('id', variantId).maybeSingle();
+  const { data: variant } = await db().from('product_variants').select('id, size, stock, active, products(name, status, cod_enabled, online_payment_enabled)').eq('id', variantId).maybeSingle();
   const product = (variant as any)?.products;
   if (!variant || !variant.active || product?.status !== 'active') throw new HttpError(404, 'not_found', 'That item is no longer available.');
+  if (product.cod_enabled === false && product.online_payment_enabled === false) {
+    throw new HttpError(422, 'product_unavailable', 'This product is currently not available for purchase.');
+  }
   if (variant.stock <= 0) throw new HttpError(409, 'out_of_stock', 'Sorry, that size is out of stock.');
   const { data: existing } = await db().from('cart_items').select('id, quantity').eq('cart_id', cartId).eq('variant_id', variantId).maybeSingle();
   const desired = (existing?.quantity ?? 0) + quantity;
@@ -265,6 +268,29 @@ route('POST', '/orders', async ctx => {
   const soldOut = priced.cart.lines.find(line => line.issue === 'out_of_stock');
   if (soldOut) throw new HttpError(409, 'out_of_stock', `${soldOut.name} (${soldOut.size}) is out of stock. Remove it to continue.`);
   if (priced.blocked) throw new HttpError(409, 'quantity_changed', 'Stock changed while you were checking out. Review your bag and try again.');
+
+  const payable = priced.cart.lines.filter(line => line.issue !== 'out_of_stock');
+  const unavailableItem = payable.find(line => line.codEnabled === false && line.onlinePaymentEnabled === false);
+  if (unavailableItem) {
+    throw new HttpError(422, 'product_unavailable', `${unavailableItem.name} is currently not available for purchase.`);
+  }
+
+  const codAllowedForCart = payable.length > 0 && payable.every(line => line.codEnabled !== false);
+  const onlineAllowedForCart = payable.length > 0 && payable.every(line => line.onlinePaymentEnabled !== false);
+
+  if (!codAllowedForCart && !onlineAllowedForCart) {
+    throw new HttpError(422, 'conflicting_payment_methods', 'The items in your bag have conflicting payment methods and cannot be purchased together. Please purchase them separately.');
+  }
+
+  if (input.paymentMethod === 'cod') {
+    if (!codAllowedForCart) {
+      throw new HttpError(422, 'payment_method_unavailable', 'Cash on Delivery is not available for one or more items in your bag.');
+    }
+  } else {
+    if (!onlineAllowedForCart) {
+      throw new HttpError(422, 'payment_method_unavailable', 'Online Payment is not available for one or more items in your bag.');
+    }
+  }
 
   const lookupToken = newToken(24);
   const { data: orderId, error } = await db().rpc('place_order', { p: {

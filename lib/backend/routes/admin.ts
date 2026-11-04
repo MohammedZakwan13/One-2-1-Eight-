@@ -99,9 +99,14 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
     console.error('[backend] save_product', error.message);
     throw new HttpError(500, 'server_error', 'Something went wrong.');
   }
-  if (typeof input.returnable === 'boolean') {
-    const result = await db().from('products').update({ returnable: input.returnable }).eq('id', data as string);
-    if (result.error && result.error.code !== '42703') console.error('[backend] returnable update', result.error.message);
+  const updates: Record<string, boolean> = {};
+  if (typeof input.returnable === 'boolean') updates.returnable = input.returnable;
+  if (typeof input.exchangeable === 'boolean') updates.exchangeable = input.exchangeable;
+  if (typeof input.codEnabled === 'boolean') updates.cod_enabled = input.codEnabled;
+  if (typeof input.onlinePaymentEnabled === 'boolean') updates.online_payment_enabled = input.onlinePaymentEnabled;
+  if (Object.keys(updates).length > 0) {
+    const result = await db().from('products').update(updates).eq('id', data as string);
+    if (result.error && result.error.code !== '42703') console.error('[backend] product policy update', result.error.message);
   }
   const kept = new Set(input.images.map(storedImage));
   await removeStorageObjects(oldImages.filter(path => !kept.has(path)));

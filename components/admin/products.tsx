@@ -18,13 +18,19 @@ const totalStock = (product: AdminProduct) => product.variants.reduce((sum, vari
 
 type Draft = {
   id?: string; name: string; slug: string; categoryId: string; price: number; compareAt: number; color: string; colorHex: string; badge: string;
-  images: string[]; stockMessage: string; returnable: boolean; fit: string; material: string; description: string; bestSeller: boolean; newArrival: boolean; luxe: boolean;
+  images: string[]; stockMessage: string; returnable: boolean; exchangeable: boolean; codEnabled: boolean; onlinePaymentEnabled: boolean;
+  fit: string; material: string; description: string; bestSeller: boolean; newArrival: boolean; luxe: boolean;
   status: 'active' | 'draft'; stock: Record<string, string>;
 };
 
 const fromProduct = (product: AdminProduct): Draft => ({
   id: product.id, name: product.name, slug: product.slug, categoryId: product.categoryId, price: product.price, compareAt: product.compareAt, color: product.color,
-  colorHex: product.colorHex, badge: product.badge ?? '', images: product.images, stockMessage: product.stockMessage ?? '', returnable: product.returnable !== false, fit: product.fit, material: product.material, description: product.description,
+  colorHex: product.colorHex, badge: product.badge ?? '', images: product.images, stockMessage: product.stockMessage ?? '',
+  returnable: product.returnable !== false,
+  exchangeable: product.exchangeable !== false,
+  codEnabled: product.codEnabled !== false,
+  onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
+  fit: product.fit, material: product.material, description: product.description,
   bestSeller: product.bestSeller, newArrival: product.newArrival, luxe: product.luxe, status: product.status,
   stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, String(product.variants.find(variant => variant.size === size)?.stock ?? '')])),
 });
@@ -63,17 +69,23 @@ export function AdminProducts() {
   const filtered = products.filter(product => `${product.name} ${product.category} ${product.id}`.toLowerCase().includes(query.toLowerCase()));
   const startNew = () => {
     setShowForm(true); setSelectedId(''); setFormErrors([]);
-    setDraft({ name: '', slug: '', categoryId: categories[0]?.id ?? '', price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', returnable: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'draft', stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])) });
+    setDraft({ name: '', slug: '', categoryId: categories[0]?.id ?? '', price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', returnable: true, exchangeable: true, codEnabled: true, onlinePaymentEnabled: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'draft', stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])) });
   };
   const patch = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(current => (current ? { ...current, [key]: value } : current));
   const save = (event: FormEvent) => {
     event.preventDefault();
     if (!draft || saveMutation.isPending) return;
+    if (!draft.codEnabled && !draft.onlinePaymentEnabled) {
+      setFormErrors(['At least one payment method (Cash on Delivery or Online Payment) must be enabled.']);
+      return;
+    }
     const variants = SIZE_OPTIONS.filter(size => draft.stock[size] !== '').map(size => ({ size, stock: Number(draft.stock[size]) }));
     const parsed = adminProductInputSchema.safeParse({
       name: draft.name, slug: (draft.slug || slugify(draft.name)).trim(), categoryId: draft.categoryId, price: draft.price, compareAt: draft.compareAt, color: draft.color, colorHex: draft.colorHex,
       badge: draft.badge || null, images: draft.images, fit: draft.fit, material: draft.material, description: draft.description,
-      bestSeller: draft.bestSeller, newArrival: draft.newArrival, luxe: draft.luxe, status: draft.status, stockMessage: draft.stockMessage, returnable: draft.returnable, variants,
+      bestSeller: draft.bestSeller, newArrival: draft.newArrival, luxe: draft.luxe, status: draft.status, stockMessage: draft.stockMessage,
+      returnable: draft.returnable, exchangeable: draft.exchangeable, codEnabled: draft.codEnabled, onlinePaymentEnabled: draft.onlinePaymentEnabled,
+      variants,
     });
     if (!parsed.success) { setFormErrors(parsed.error.issues.map(issue => `${issue.path.join('.') || 'form'}: ${issue.message}`)); return; }
     setFormErrors([]);
@@ -96,7 +108,14 @@ export function AdminProducts() {
             <div className="admin-form-two"><label>URL slug<input value={draft.slug} onChange={e => patch('slug', e.target.value)} placeholder="auto-generated from the name" /></label><label>Category<select value={draft.categoryId} onChange={e => patch('categoryId', e.target.value)}>{categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label></div>
             <div className="admin-form-three"><label>Price (₹)<input type="number" min="0" step="1" value={draft.price} onChange={e => patch('price', Number(e.target.value))} /></label><label>Compare-at (₹)<input type="number" min="0" step="1" value={draft.compareAt} onChange={e => patch('compareAt', Number(e.target.value))} /></label><label>Status<select value={draft.status} onChange={e => patch('status', e.target.value as Draft['status'])}><option value="active">Active (visible)</option><option value="draft">Draft (hidden)</option></select></label></div>
             <fieldset className="admin-feature-flags admin-size-stock"><legend>Real stock by size (leave blank if the size is not offered)</legend>{SIZE_OPTIONS.map(size => <label key={size}>{size}<input type="number" min="0" step="1" value={draft.stock[size]} onChange={e => patch('stock', { ...draft.stock, [size]: e.target.value })} aria-label={`Stock for size ${size}`} /></label>)}</fieldset>
-            <label className="admin-check"><input type="checkbox" checked={draft.returnable} onChange={e => patch('returnable', e.target.checked)} /> Returnable product<small>When off, customers cannot request a return for this product. Orders already placed keep the setting that applied when they were bought.</small></label>
+            <fieldset className="admin-feature-flags"><legend>Returns & Exchanges</legend>
+              <label className="admin-check"><input type="checkbox" checked={draft.returnable} onChange={e => patch('returnable', e.target.checked)} /> Returnable product<small>When off, customers cannot request a return for this product. Orders already placed keep the setting that applied when they were bought.</small></label>
+              <label className="admin-check"><input type="checkbox" checked={draft.exchangeable} onChange={e => patch('exchangeable', e.target.checked)} /> Exchangeable product<small>When off, customers cannot request a size or colour exchange for this product.</small></label>
+            </fieldset>
+            <fieldset className="admin-feature-flags"><legend>Payment Methods</legend>
+              <label className="admin-check"><input type="checkbox" checked={draft.codEnabled} onChange={e => patch('codEnabled', e.target.checked)} /> Cash on Delivery (COD)<small>Allow customers to pay via Cash on Delivery for this product.</small></label>
+              <label className="admin-check"><input type="checkbox" checked={draft.onlinePaymentEnabled} onChange={e => patch('onlinePaymentEnabled', e.target.checked)} /> Online Payment<small>Allow customers to pay via UPI, cards, and netbanking for this product.</small></label>
+            </fieldset>
             <label>Stock message on the storefront<input maxLength={160} value={draft.stockMessage} onChange={e => patch('stockMessage', e.target.value)} placeholder="Enter the message customers should see on this product" /><small>Display text only, shown on the product page exactly as written. It never changes real stock, availability or low-stock alerts. Leave empty to show nothing.</small></label>
             <div className="admin-form-two"><label>Colour name<input value={draft.color} onChange={e => patch('color', e.target.value)} /></label><label>Colour swatch<input type="color" value={draft.colorHex} onChange={e => patch('colorHex', e.target.value)} /></label></div>
             <ImageUploader label="Product images" images={draft.images} onChange={images => patch('images', images)} hint="The first image is the primary image shown on cards. JPEG, PNG, WebP or AVIF · up to 4 MB each." />

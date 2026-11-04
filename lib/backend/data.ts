@@ -57,6 +57,9 @@ export async function toProducts(rows: Row[], settings: Row): Promise<Product[]>
       color: r.color, colorHex: r.color_hex, rating: stat ? Math.round((stat.sum / stat.count) * 10) / 10 : 0, reviewCount: stat?.count ?? 0, badge: r.badge,
       images: (r.images as string[]).map(imageUrl), fit: r.fit, material: r.material, description: r.description, bestSeller: r.best_seller, newArrival: r.new_arrival, luxe: r.luxe,
       stockMessage: r.stock_message ?? null, returnable: r.returnable ?? true,
+      exchangeable: r.exchangeable ?? r.returnable ?? true,
+      codEnabled: r.cod_enabled ?? true,
+      onlinePaymentEnabled: r.online_payment_enabled ?? true,
       variants: activeVariants(r).map(v => ({ id: v.id, sku: v.sku, size: v.size, availability: availability(v.stock, threshold) })),
       updatedAt: r.updated_at,
     };
@@ -89,7 +92,7 @@ export function selectRelated(current: Row, candidates: Row[], limit: number): R
 // ───────────── cart pricing ─────────────
 
 export const MAX_LINE_QUANTITY = 20;
-const CART_SELECT = 'id, quantity, variant_id, product_variants(id, sku, size, stock, active, products(id, slug, name, price, compare_at, color, images, status, luxe))';
+const CART_SELECT = 'id, quantity, variant_id, product_variants(id, sku, size, stock, active, products(id, slug, name, price, compare_at, color, images, status, luxe, returnable, exchangeable, cod_enabled, online_payment_enabled))';
 
 async function evaluateCoupon(code: string, subtotal: number, hasLuxe: boolean): Promise<{ discount: number; description: string; reason?: string } | null> {
   const { data: coupon } = await db().from('coupons').select('*').eq('code', code).maybeSingle();
@@ -130,14 +133,42 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
       await db().from('cart_items').update({ quantity }).eq('id', item.id);
     }
     const price = Number(product.price);
+    const returnable = product.returnable ?? true;
+    const exchangeable = product.exchangeable ?? product.returnable ?? true;
+    const codEnabled = product.cod_enabled ?? true;
+    const onlinePaymentEnabled = product.online_payment_enabled ?? true;
+    if (!codEnabled && !onlinePaymentEnabled) {
+      issue = 'out_of_stock';
+      blocked = true;
+      messages.push(`${product.name} is currently not available for purchase.`);
+    }
     lines.push({
       id: item.id, variantId: variant.id, productId: product.id, slug: product.slug, name: product.name, image: imageUrl((product.images as string[])[0] ?? ''), color: product.color,
       size: variant.size, quantity, unitPrice: price, compareAt: Number(product.compare_at), lineTotal: price * quantity, maxQuantity: Math.min(variant.stock, MAX_LINE_QUANTITY), issue,
+      returnable, exchangeable, codEnabled, onlinePaymentEnabled,
     });
   }
   const payable = lines.filter(line => line.issue !== 'out_of_stock');
   const subtotal = payable.reduce((sum, line) => sum + line.lineTotal, 0);
   const hasLuxe = items.some(item => item.product_variants?.products?.luxe);
+
+  const availableStoreMethods = paymentMethods();
+  const codAllowed = payable.length > 0 && payable.every(line => line.codEnabled !== false);
+  const onlineAllowed = payable.length > 0 && payable.every(line => line.onlinePaymentEnabled !== false);
+  const allowedPaymentMethods: Array<'upi' | 'card' | 'cod'> = [];
+  if (codAllowed && availableStoreMethods.includes('cod')) {
+    allowedPaymentMethods.push('cod');
+  }
+  if (onlineAllowed) {
+    if (availableStoreMethods.includes('upi')) allowedPaymentMethods.push('upi');
+    if (availableStoreMethods.includes('card')) allowedPaymentMethods.push('card');
+  }
+  let paymentConflict = false;
+  if (payable.length > 0 && allowedPaymentMethods.length === 0) {
+    paymentConflict = true;
+    blocked = true;
+    messages.push('Items in your bag have conflicting payment options (some allow only Cash on Delivery, while others allow only Online Payment). Please purchase them separately.');
+  }
 
   let discount = 0;
   let coupon: Cart['coupon'] = null;
@@ -152,7 +183,7 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
   const threshold = Number(settings.free_shipping_threshold);
   const shipping = subtotal === 0 || subtotal - discount >= threshold ? 0 : Number(settings.shipping_fee);
   return {
-    cart: { id: cartId, currency: 'INR', lines, coupon, totals: { subtotal, discount, shipping, total: Math.max(0, subtotal - discount + shipping) }, freeShippingThreshold: threshold, messages },
+    cart: { id: cartId, currency: 'INR', lines, coupon, totals: { subtotal, discount, shipping, total: Math.max(0, subtotal - discount + shipping) }, freeShippingThreshold: threshold, messages, allowedPaymentMethods, paymentConflict },
     blocked: blocked || messages.some(m => m.startsWith('Only')),
     coupon: coupon?.code ?? null,
   };
@@ -178,7 +209,7 @@ export function toOrder(r: Row): Order {
     id: r.id, number: r.number, status: r.status, paymentStatus: r.payment_status, paymentMethod: r.payment_method, currency: 'INR',
     totals: { subtotal: Number(r.subtotal), discount: Number(r.discount), shipping: Number(r.shipping), total: Number(r.total) },
     lines: (r.order_items ?? []).map((i: Row) => ({
-      id: i.id, returnable: i.returnable ?? true, productId: i.product_id, variantId: i.variant_id, name: i.name, image: imageUrl(i.image), size: i.size, color: i.color, quantity: i.quantity, unitPrice: Number(i.unit_price), lineTotal: Number(i.line_total),
+      id: i.id, returnable: i.returnable ?? true, exchangeable: i.exchangeable ?? i.returnable ?? true, productId: i.product_id, variantId: i.variant_id, name: i.name, image: imageUrl(i.image), size: i.size, color: i.color, quantity: i.quantity, unitPrice: Number(i.unit_price), lineTotal: Number(i.line_total),
     })),
     contact: r.contact, shippingAddress: r.shipping_address, createdAt: r.created_at,
     history: history.map((h: Row) => ({ status: h.to_status, at: h.created_at, note: h.actor_type === 'admin' ? null : h.note })),
