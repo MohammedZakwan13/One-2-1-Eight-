@@ -1,12 +1,32 @@
 import type { Metadata, Viewport } from 'next';
-import { DM_Sans, Manrope } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { AppProviders } from '@/components/providers/app-providers';
 import { getServerEnv } from '@/lib/env';
 import { BRAND_NAME } from '@/lib/site';
 
-const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-dm-sans', display: 'swap' });
-const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], variable: '--font-manrope', display: 'swap' });
+const dmSans = localFont({
+  src: [
+    { path: './fonts/dm-sans-400.ttf', weight: '400', style: 'normal' },
+    { path: './fonts/dm-sans-500.ttf', weight: '500', style: 'normal' },
+    { path: './fonts/dm-sans-600.ttf', weight: '600', style: 'normal' },
+    { path: './fonts/dm-sans-700.ttf', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-dm-sans',
+  display: 'swap',
+});
+
+const manrope = localFont({
+  src: [
+    { path: './fonts/manrope-400.ttf', weight: '400', style: 'normal' },
+    { path: './fonts/manrope-500.ttf', weight: '500', style: 'normal' },
+    { path: './fonts/manrope-600.ttf', weight: '600', style: 'normal' },
+    { path: './fonts/manrope-700.ttf', weight: '700', style: 'normal' },
+    { path: './fonts/manrope-800.ttf', weight: '800', style: 'normal' },
+  ],
+  variable: '--font-manrope',
+  display: 'swap',
+});
 
 // Fails fast on unsafe configuration (placeholder domain, missing Supabase keys…).
 const env = getServerEnv();

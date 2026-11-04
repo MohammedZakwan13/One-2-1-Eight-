@@ -116,7 +116,7 @@ export function parseServerEnv(source: Record<string, string | undefined>): Serv
   if (Boolean(env.RESEND_API_KEY) !== Boolean(env.EMAIL_FROM)) throw new EnvError('RESEND_API_KEY and EMAIL_FROM must be set together.');
   if (new Set([Boolean(env.MSG91_AUTH_KEY), Boolean(env.MSG91_WIDGET_ID), Boolean(env.MSG91_WIDGET_TOKEN_AUTH)]).size > 1) throw new EnvError('MSG91_AUTH_KEY, MSG91_WIDGET_ID and MSG91_WIDGET_TOKEN_AUTH must be set together.');
 
-  if (env.TRUSTED_PROXY === 'cloudflare' && !env.TRUSTED_PROXY_SECRET && appEnv !== 'development') throw new EnvError('TRUSTED_PROXY=cloudflare needs TRUSTED_PROXY_SECRET (min 24 characters) outside development: without it a direct request to the origin could forge CF-Connecting-IP.');
+  if (env.TRUSTED_PROXY === 'cloudflare' && !env.TRUSTED_PROXY_SECRET && appEnv !== 'development' && !building) throw new EnvError('TRUSTED_PROXY=cloudflare needs TRUSTED_PROXY_SECRET (min 24 characters) outside development: without it a direct request to the origin could forge CF-Connecting-IP.');
   if (isProduction && env.TRUSTED_PROXY === 'none') throw new EnvError('TRUSTED_PROXY must name a supported trusted proxy (cloudflare or vercel) in production, so IP rate limits can use a verified client IP.');
   let siteUrl = env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {

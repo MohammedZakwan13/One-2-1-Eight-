@@ -15,7 +15,7 @@ export function buildCsp(env: Record<string, string | undefined>, isDev: boolean
   // Razorpay Checkout is allowed only when the payment provider is actually configured.
   const razorpay = Boolean(env.RAZORPAY_KEY_ID);
   // The MSG91 OTP Widget SDK is loaded (and talks to MSG91) from the browser only when the widget is configured.
-  const msg91 = Boolean(env.MSG91_WIDGET_ID);
+  const msg91 = Boolean(env.MSG91_WIDGET_ID || env.MSG91_WIDGET_ENABLED === 'true');
   // SDK file: verify.msg91.com. Its API calls: control.msg91.com (+ msg91backup.phone91.com as its built-in fallback). CAPTCHA is hCaptcha (widget captcha_type 1), whose documented sources are hcaptcha.com and *.hcaptcha.com.
   const hcaptcha = ['https://hcaptcha.com', 'https://*.hcaptcha.com'];
   const scriptSrc = ["'self'", "'unsafe-inline'", ...(isDev ? ["'unsafe-eval'"] : []), ...(razorpay ? ['https://checkout.razorpay.com'] : []), ...(msg91 ? ['https://verify.msg91.com', ...hcaptcha] : []), ...list(env.CSP_EXTRA_SCRIPT_SRC)];
