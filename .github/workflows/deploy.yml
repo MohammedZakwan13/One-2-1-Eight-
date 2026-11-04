@@ -1,0 +1,111 @@
+
+name: One2Oneight Production CI/CD
+
+on:
+  push:
+    branches:
+      - feature/supabase-api
+  pull_request:
+    branches:
+      - feature/supabase-api
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: one2oneight-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        env:
+          APP_ENV: production
+          TRUSTED_PROXY: cloudflare
+          MSG91_WIDGET_ENABLED: 'true'
+          NEXT_PUBLIC_SITE_URL: https://one21eight.com
+        run: npm run build
+
+  deploy:
+    name: Deploy to Hostinger VPS
+    needs: ci
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+        echo "187.127.179.43 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBvvimsZNjZpPNVW4RXtidpZGryj9EiQeQJX5yJpNB1z" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            "bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          cd /var/www/one2oneight
+
+          OLD_IMAGE=$(sudo docker inspect one21eight-web:production --format='{{.Id}}' 2>/dev/null || true)
+
+          rollback() {
+            echo "Deployment failed. Attempting rollback..."
+            if [ -n "$OLD_IMAGE" ]; then
+              sudo docker tag "$OLD_IMAGE" one21eight-web:production
+              sudo docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate
+            fi
+          }
+          trap rollback ERR
+
+          git fetch origin feature/supabase-api
+          git reset --hard "$GITHUB_SHA"
+
+          sudo docker compose -f docker-compose.prod.yml build web
+          sudo docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
+              echo "Production deployment healthy."
+              trap - ERR
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Health check failed."
+          exit 1
+          REMOTE
+        env:
+          GITHUB_SHA: ${{ github.sha }}
