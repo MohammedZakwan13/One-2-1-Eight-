@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stockTextError } from '@/lib/inventory';
 
 /**
  * Typed contract for the backend REST API.
@@ -35,6 +36,8 @@ export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
 export const availabilitySchema = z.object({
   status: z.enum(['in_stock', 'low_stock', 'out_of_stock']),
+  /** Exact units for this size. Present ONLY for products whose stock message mode is 'real'; never for any other product. */
+  quantity: z.number().int().nonnegative().optional(),
 });
 
 export const variantSchema = z.object({
@@ -68,6 +71,10 @@ export const productSchema = z.object({
   luxe: z.boolean(),
   /** Admin-written display text for the product page (e.g. "Limited drop"). Pure copy: never derived from, or used as, inventory. */
   stockMessage: z.string().max(160).nullish(),
+  /** 'real' = actual per-size stock plus the message; 'custom' = admin-entered display number + message (NOT inventory); 'none' = nothing. Absent on legacy data. */
+  stockMessageMode: z.enum(['none', 'real', 'custom']).optional(),
+  /** Promotional display number for 'custom' mode only. Never inventory; null/absent in every other mode. */
+  stockMessageNumber: z.number().int().min(0).max(100_000).nullish(),
   /** Whether the product can be returned after delivery. Defaults to true for products saved before the setting existed. */
   returnable: z.boolean().optional(),
   /** Whether the product can be exchanged after delivery. */
@@ -402,6 +409,8 @@ export const adminProductSchema = productSchema.extend({
   categoryId: id,
   status: z.enum(['active', 'draft']),
   variants: z.array(adminVariantSchema).min(1),
+  /** True while a message written before stock modes existed has not been reviewed by an admin. */
+  stockMessageReview: z.boolean().optional(),
 });
 export type AdminProduct = z.infer<typeof adminProductSchema>;
 export const adminProductListSchema = paginated(adminProductSchema);
@@ -424,14 +433,28 @@ export const adminProductInputSchema = z.object({
   luxe: z.boolean(),
   status: z.enum(['active', 'draft']),
   stockMessage: z.string().trim().max(160).nullish(),
+  stockMessageMode: z.enum(['none', 'real', 'custom']).optional(),
+  stockMessageNumber: z.number().int().min(0).max(100_000).nullish(),
   returnable: z.boolean().optional(),
   exchangeable: z.boolean().optional(),
   codEnabled: z.boolean().optional(),
   onlinePaymentEnabled: z.boolean().optional(),
-  variants: z.array(z.object({ size: z.string().trim().min(1).max(16), sku: z.string().trim().max(64).nullish(), stock: z.number().int().min(0).max(100_000) })).min(1),
+  /** Sent ONLY when the admin intentionally changes size stock (or creates a product). Omitted for message/metadata-only saves, which never write inventory. */
+  variants: z.array(z.object({ size: z.string().trim().min(1).max(16), sku: z.string().trim().max(64).nullish(), stock: z.number().int().min(0).max(100_000) })).min(1).optional(),
+  /** Stock per size as it was when the editor loaded the product. Required with `variants` on updates; the server rejects the update if live stock differs (409 stock_conflict). */
+  expectedStock: z.record(z.string().trim().min(1).max(16), z.number().int().min(0).max(100_000)).optional(),
 }).refine(data => data.codEnabled !== false || data.onlinePaymentEnabled !== false, {
   message: 'At least one payment method (Cash on Delivery or Online Payment) must be enabled.',
   path: ['paymentMethods'],
+}).superRefine((data, ctx) => {
+  if (data.stockMessageMode && data.stockMessageMode !== 'none') {
+    const problem = stockTextError(data.stockMessage);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['stockMessage'] });
+  }
+  // A display number exists only in Custom mode; Real and None never carry one.
+  if (data.stockMessageNumber != null && data.stockMessageMode !== 'custom') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A custom display number is only allowed in Custom Stock mode.', path: ['stockMessageNumber'] });
+  }
 });
 export type AdminProductInput = z.infer<typeof adminProductInputSchema>;
 
@@ -494,7 +517,7 @@ export const dashboardSummarySchema = z.object({
   productCount: z.number().int().nonnegative(),
   lowStockCount: z.number().int().nonnegative(),
   /** Sizes at or below the low-stock threshold, from the REAL database stock. */
-  lowStockItems: z.array(z.object({ name: z.string(), size: z.string(), sku: z.string(), stock: z.number().int().nonnegative() })),
+  lowStockItems: z.array(z.object({ productId: id.optional(), name: z.string(), size: z.string(), sku: z.string(), stock: z.number().int().nonnegative() })),
   newArrivalCount: z.number().int().nonnegative(),
   newLeadCount: z.number().int().nonnegative(),
   pendingReviewCount: z.number().int().nonnegative(),

@@ -1,4 +1,6 @@
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_IMAGE_UPLOAD_LABEL } from '@/lib/upload-limits';
+import { summarizeLowStock } from '@/lib/inventory';
+import { productPayload, saveProductError } from '@/lib/backend/product-payload';
 import 'server-only';
 import { slugify } from '@/lib/format';
 import { randomUUID } from 'node:crypto';
@@ -53,9 +55,11 @@ route('GET', '/admin/dashboard/summary', async ctx => {
   await requireAdmin(ctx, 'dashboard');
   const settings = await getSettingsRow();
   const stats = must(await db().rpc('dashboard_stats', { p_low: settings.low_stock_threshold }), 'dashboard') as Row;
+  const lowRows = must(await db().from('product_variants').select('sku, size, stock, products!inner(id, name, status)').eq('active', true).eq('products.status', 'active').gt('stock', 0).lte('stock', settings.low_stock_threshold), 'low stock') as Row[];
+  const lowStock = summarizeLowStock(lowRows.map(row => ({ productId: row.products.id, name: row.products.name, size: row.size, sku: row.sku, stock: row.stock })), settings.low_stock_threshold);
   const recent = must(await db().from('orders').select(ORDER_SELECT).order('created_at', { ascending: false }).limit(5), 'recent orders') as Row[];
   return {
-    orderCount: stats.order_count, grossRevenue: Number(stats.gross_revenue), productCount: stats.product_count, lowStockCount: stats.low_stock_count, lowStockItems: stats.low_stock_items,
+    orderCount: stats.order_count, grossRevenue: Number(stats.gross_revenue), productCount: stats.product_count, lowStockCount: lowStock.count, lowStockItems: lowStock.items,
     newArrivalCount: stats.new_arrival_count, newLeadCount: stats.new_lead_count, pendingReviewCount: stats.pending_review_count,
     orderCountDeltaPercent: stats.order_delta === null ? null : Number(stats.order_delta), revenueDeltaPercent: stats.revenue_delta === null ? null : Number(stats.revenue_delta),
     revenueSeries: (stats.series as Row[]).map(point => ({ date: point.date, amount: Number(point.amount) })), recentOrders: recent.map(toOrder),
@@ -64,16 +68,6 @@ route('GET', '/admin/dashboard/summary', async ctx => {
 
 // ───────────── products ─────────────
 
-const productPayload = (input: z.infer<typeof adminProductInputSchema>, id?: string) => ({
-  id: id ?? '', slug: input.slug, name: input.name, category_id: input.categoryId, price: input.price, compare_at: input.compareAt, color: input.color, color_hex: input.colorHex,
-  badge: input.badge ?? '', images: input.images.map(storedImage), fit: input.fit, material: input.material, description: input.description, best_seller: input.bestSeller,
-  new_arrival: input.newArrival, luxe: input.luxe, status: input.status, stock_display: 'status', stock_message: input.stockMessage?.trim() ?? '',
-  returnable: input.returnable === false ? false : true,
-  exchangeable: input.exchangeable === false ? false : true,
-  cod_enabled: input.codEnabled === false ? false : true,
-  online_payment_enabled: input.onlinePaymentEnabled === false ? false : true,
-  variants: input.variants.map(v => ({ size: v.size, sku: v.sku ?? '', stock: v.stock })),
-});
 
 async function adminProductById(id: string) {
   const [{ data }, settings] = await Promise.all([db().from('products').select(PRODUCT_SELECT).eq('id', id).maybeSingle(), getSettingsRow()]);
@@ -90,6 +84,12 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
       throw new HttpError(503, 'migration_required', 'Custom stock messages need database migration 0004. Ask the developer to apply it.');
     }
   }
+  if ((input.stockMessageMode && input.stockMessageMode !== 'none') || input.stockMessageNumber != null) {
+    const probe = await db().from('products').select('stock_message_mode, stock_message_number').limit(1);
+    if (probe.error?.code === '42703' || /stock_message_(mode|number)/.test(probe.error?.message ?? '')) {
+      throw new HttpError(503, 'migration_required', 'Stock message modes need database migration 0008. Ask the developer to apply it.');
+    }
+  }
   if (input.returnable === false) {
     const probe = await db().from('products').select('returnable').limit(1);
     if (probe.error) throw new HttpError(503, 'migration_required', 'The returnable setting needs database migration 0005. Ask the developer to apply it.');
@@ -100,6 +100,13 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
       throw new HttpError(503, 'migration_required', 'Product policy and payment method controls require database migration 0006. Please apply supabase/migrations/0006_product_policies_payments.sql.');
     }
   }
+  if (!id && !input.variants) throw new HttpError(422, 'validation_failed', 'A new product needs at least one size with stock.', { variants: ['Required'] });
+  if (id && input.variants && !input.expectedStock) throw new HttpError(422, 'validation_failed', 'Stock changes must include the stock you saw when you opened the product. Refresh and try again.', { variants: ['Stock snapshot missing'] });
+  if (id && !input.variants) {
+    // A save without stock relies on the migration-0008 save_product (it skips the variant loop). The previous function would deactivate every size, so refuse instead.
+    const probe = await db().from('products').select('stock_message_mode').limit(1);
+    if (probe.error) throw new HttpError(503, 'migration_required', 'Saving products now requires database migration 0008. Ask the developer to apply it.');
+  }
   const oldImages: string[] = id ? ((await db().from('products').select('images').eq('id', id).maybeSingle()).data?.images ?? []) : [];
   const { data, error } = await db().rpc('save_product', { p: productPayload(input, id), p_actor: adminId });
   if (error) {
@@ -107,6 +114,8 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
     if (isUnique(error, 'sku')) throw new HttpError(409, 'sku_taken', 'A SKU is already used by another product.', { variants: ['SKU already in use'] });
     if (error.code === '23503') throw new HttpError(422, 'validation_failed', 'Unknown category.', { categoryId: ['Unknown category'] });
     if ((error.message ?? '').includes('not_found')) throw new HttpError(404, 'not_found', 'Product not found.');
+    const known = saveProductError(error);
+    if (known) throw known;
     console.error('[backend] save_product', error.message);
     throw new HttpError(500, 'server_error', 'Something went wrong.');
   }

@@ -10,7 +10,7 @@ import {
 } from '@/lib/backend/core';
 import {
   MAX_LINE_QUANTITY, ORDER_SELECT, PRODUCT_SELECT, applyCoupon, availability, getSettingsRow, loadOrder, orderMailData, paymentMethods, priceCart, reviewStats, selectRelated,
-  toOrder, toProducts, toSettings, type Row,
+  toOrder, toProducts, toSettings, limitedAvailabilityMessage, rowStockMode, type Row,
 } from '@/lib/backend/data';
 import { isCancellable, presentOrders, trackingUrl } from '@/lib/backend/returns';
 import { checkOtpRequest, logOtp, noteRateLimit, noteValidationFailure, requireSameMobile } from '@/lib/backend/otp';
@@ -190,7 +190,7 @@ route('GET', '/cart', async ctx => (await priceCart(await cartFor(ctx))).cart);
 route('POST', '/cart/items', async ctx => {
   const cartId = await cartFor(ctx);
   const { variantId, quantity } = await ctx.body(addCartItemSchema);
-  const { data: variant } = await db().from('product_variants').select('id, size, stock, active, products(name, status, cod_enabled, online_payment_enabled)').eq('id', variantId).maybeSingle();
+  const { data: variant } = await db().from('product_variants').select('id, size, stock, active, products(*)').eq('id', variantId).maybeSingle();
   const product = (variant as any)?.products;
   if (!variant || !variant.active || product?.status !== 'active') throw new HttpError(404, 'not_found', 'That item is no longer available.');
   if (product.cod_enabled === false && product.online_payment_enabled === false) {
@@ -203,7 +203,7 @@ route('POST', '/cart/items', async ctx => {
   if (existing) must(await db().from('cart_items').update({ quantity: capped }).eq('id', existing.id), 'update cart item');
   else must(await db().from('cart_items').insert({ cart_id: cartId, variant_id: variantId, quantity: capped }), 'add cart item');
   const priced = (await priceCart(cartId)).cart;
-  if (capped < desired) priced.messages.push(`Only ${capped} available for ${product.name} (${variant.size}).`);
+  if (capped < desired) priced.messages.push(limitedAvailabilityMessage(rowStockMode(product), capped, product.name, variant.size));
   return priced;
 });
 

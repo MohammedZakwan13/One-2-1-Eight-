@@ -1,4 +1,5 @@
 import type { AdminProduct, Category, Product, Variant } from '@/lib/api/schemas';
+import { effectiveStockMode, type StockMessageMode } from '@/lib/inventory';
 
 /** Category tiles/menus show exactly the categories the CMS marks active – no hard-coded exclusions. */
 export const isStorefrontCategory = (category: Category) => category.active;
@@ -19,7 +20,7 @@ export const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL'] as const;
 
 export type AdminProductDraft = {
   id?: string; name: string; slug: string; categoryId: string; price: number; compareAt: number; color: string; colorHex: string; badge: string;
-  images: string[]; stockMessage: string; returnable: boolean; exchangeable: boolean; codEnabled: boolean; onlinePaymentEnabled: boolean;
+  images: string[]; stockMessage: string; stockMessageMode: StockMessageMode; stockMessageNumber: string; stockMessageReview: boolean; returnable: boolean; exchangeable: boolean; codEnabled: boolean; onlinePaymentEnabled: boolean;
   fit: string; material: string; description: string; bestSeller: boolean; newArrival: boolean; luxe: boolean;
   status: 'active' | 'draft'; stock: Record<string, string>;
 };
@@ -27,6 +28,7 @@ export type AdminProductDraft = {
 export const adminProductToDraft = (product: AdminProduct): AdminProductDraft => ({
   id: product.id, name: product.name, slug: product.slug, categoryId: product.categoryId, price: product.price, compareAt: product.compareAt, color: product.color,
   colorHex: product.colorHex, badge: product.badge ?? '', images: product.images, stockMessage: product.stockMessage ?? '',
+  stockMessageMode: effectiveStockMode(product), stockMessageNumber: product.stockMessageNumber == null ? '' : String(product.stockMessageNumber), stockMessageReview: product.stockMessageReview === true,
   returnable: product.returnable === false ? false : true,
   exchangeable: product.exchangeable === false ? false : true,
   codEnabled: product.codEnabled === false ? false : true,

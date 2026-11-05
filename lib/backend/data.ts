@@ -33,6 +33,19 @@ export function availability(stock: number, threshold: number) {
   return { status: (stock <= 0 ? 'out_of_stock' : stock <= threshold ? 'low_stock' : 'in_stock') as 'in_stock' | 'low_stock' | 'out_of_stock' };
 }
 
+/** Public availability. The exact quantity is exposed only for products whose stock message mode is 'real'. */
+export function publicAvailability(mode: string, stock: number, threshold: number) {
+  return mode === 'real' ? { ...availability(stock, threshold), quantity: Math.max(0, stock) } : availability(stock, threshold);
+}
+
+/** Legacy rows (no mode column yet, or mode left at the default) keep any saved text as a Custom Stock Note. */
+/** Exact stock is public only for Real Stock products. Every other product gets the product-wide cap and a generic message. */
+export const lineMaxQuantity = (mode: string, stock: number) => (mode === 'real' ? Math.min(stock, MAX_LINE_QUANTITY) : MAX_LINE_QUANTITY);
+export const limitedAvailabilityMessage = (mode: string, stock: number, name: string, size: string) =>
+  mode === 'real' ? `Only ${stock} of ${name} (${size}) are available.` : `${name} (${size}) has limited availability, so the quantity in your bag was adjusted.`;
+
+export const rowStockMode = (r: Row): 'none' | 'real' | 'custom' => (r.stock_message_mode && r.stock_message_mode !== 'none' ? r.stock_message_mode : r.stock_message_mode === undefined && r.stock_message?.trim() ? 'custom' : 'none');
+
 const activeVariants = (row: Row): Row[] => (row.product_variants ?? []).filter((v: Row) => v.active).sort((a: Row, b: Row) => a.sort_order - b.sort_order);
 
 export async function reviewStats(productIds: string[]) {
@@ -52,16 +65,19 @@ export async function toProducts(rows: Row[], settings: Row): Promise<Product[]>
   const threshold = settings.low_stock_threshold as number;
   return rows.map(r => {
     const stat = stats.get(r.id);
+    const mode = rowStockMode(r);
     return {
       id: r.id, slug: r.slug, name: r.name, category: r.categories.name, categorySlug: r.categories.slug, price: Number(r.price), compareAt: Number(r.compare_at),
       color: r.color, colorHex: r.color_hex, rating: stat ? Math.round((stat.sum / stat.count) * 10) / 10 : 0, reviewCount: stat?.count ?? 0, badge: r.badge,
       images: (r.images as string[]).map(imageUrl), fit: r.fit, material: r.material, description: r.description, bestSeller: r.best_seller, newArrival: r.new_arrival, luxe: r.luxe,
-      stockMessage: r.stock_message ?? null,
+      stockMessage: mode === 'none' ? null : (r.stock_message ?? null),
+      stockMessageMode: mode,
+      stockMessageNumber: mode === 'custom' ? (r.stock_message_number ?? null) : null,
       returnable: r.returnable === false ? false : (r.returnable ?? true),
       exchangeable: r.exchangeable === false ? false : (r.exchangeable ?? (r.returnable === false ? false : true)),
       codEnabled: r.cod_enabled === false ? false : (r.cod_enabled ?? true),
       onlinePaymentEnabled: r.online_payment_enabled === false ? false : (r.online_payment_enabled ?? true),
-      variants: activeVariants(r).map(v => ({ id: v.id, sku: v.sku, size: v.size, availability: availability(v.stock, threshold) })),
+      variants: activeVariants(r).map(v => ({ id: v.id, sku: v.sku, size: v.size, availability: publicAvailability(mode, v.stock, threshold) })),
       updatedAt: r.updated_at,
     };
   });
@@ -72,6 +88,9 @@ export function toAdminProduct(r: Row, settings: Row, publicProduct: Product): A
   const live = activeVariants(r);
   return {
     ...publicProduct, categoryId: r.category_id, status: r.status,
+    stockMessage: r.stock_message ?? null,
+    stockMessageNumber: r.stock_message_number ?? null,
+    stockMessageReview: r.stock_message_review === true,
     variants: live.map(v => ({ id: v.id, sku: v.sku, size: v.size, stock: v.stock, availability: availability(v.stock, threshold) })),
   };
 }
@@ -93,7 +112,7 @@ export function selectRelated(current: Row, candidates: Row[], limit: number): R
 // ───────────── cart pricing ─────────────
 
 export const MAX_LINE_QUANTITY = 20;
-const CART_SELECT = 'id, quantity, variant_id, product_variants(id, sku, size, stock, active, products(id, slug, name, price, compare_at, color, images, status, luxe, returnable, exchangeable, cod_enabled, online_payment_enabled))';
+const CART_SELECT = 'id, quantity, variant_id, product_variants(id, sku, size, stock, active, products(*))';
 
 async function evaluateCoupon(code: string, subtotal: number, hasLuxe: boolean): Promise<{ discount: number; description: string; reason?: string } | null> {
   const { data: coupon } = await db().from('coupons').select('*').eq('code', code).maybeSingle();
@@ -130,7 +149,8 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
     if (variant.stock <= 0) { issue = 'out_of_stock'; blocked = true; }
     else if (quantity > variant.stock) {
       quantity = variant.stock; issue = 'quantity_reduced';
-      messages.push(`Only ${variant.stock} of ${product.name} (${variant.size}) are available.`);
+      // Exact quantities are public only for products in Real Stock mode; everyone else gets a generic message.
+      messages.push(limitedAvailabilityMessage(rowStockMode(product), variant.stock, product.name, variant.size));
       await db().from('cart_items').update({ quantity }).eq('id', item.id);
     }
     const price = Number(product.price);
@@ -145,7 +165,7 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
     }
     lines.push({
       id: item.id, variantId: variant.id, productId: product.id, slug: product.slug, name: product.name, image: imageUrl((product.images as string[])[0] ?? ''), color: product.color,
-      size: variant.size, quantity, unitPrice: price, compareAt: Number(product.compare_at), lineTotal: price * quantity, maxQuantity: Math.min(variant.stock, MAX_LINE_QUANTITY), issue,
+      size: variant.size, quantity, unitPrice: price, compareAt: Number(product.compare_at), lineTotal: price * quantity, maxQuantity: lineMaxQuantity(rowStockMode(product), variant.stock), issue,
       returnable, exchangeable, codEnabled, onlinePaymentEnabled,
     });
   }

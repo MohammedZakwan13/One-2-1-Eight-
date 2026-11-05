@@ -462,8 +462,9 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProductInput' } } } }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } } }
-        '409': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error', description: "`slug_taken` or `sku_taken`." }
+        '422': { $ref: '#/components/responses/Error', description: "`validation_failed` (e.g. no `variants`, a stock message claiming a quantity, a custom number outside Custom mode)." }
+        '503': { $ref: '#/components/responses/Error', description: "`migration_required`: stock message modes need database migration 0008." }
   /admin/products/bulk-flags:
     post:
       tags: [Admin]
@@ -484,7 +485,9 @@ paths:
       responses:
         '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminProduct' } } } }
         '404': { $ref: '#/components/responses/Error' }
-        '409': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error', description: "`slug_taken`, `sku_taken`, `stock_conflict` (stock for a changed or removed size no longer matches `expectedStock`: an order or another update changed it) or `stock_snapshot_required` (an update sent `variants` without `expectedStock`, e.g. from an out-of-date admin page). Nothing was saved in either stock case; refresh the product and repeat the change." }
+        '422': { $ref: '#/components/responses/Error', description: "`validation_failed` (e.g. `variants` sent without `expectedStock`, a stock message claiming a quantity, a custom number outside Custom mode)." }
+        '503': { $ref: '#/components/responses/Error', description: "`migration_required`: saving products requires database migration 0008." }
     delete:
       tags: [Admin]
       operationId: adminDeleteProduct
@@ -810,7 +813,7 @@ components:
     Id: { name: id, in: path, required: true, schema: { type: string } }
   responses:
     Error:
-      description: "Error envelope. `code` is machine-readable (e.g. validation_failed, unauthorized, forbidden, not_found, conflict, rate_limited, csrf_invalid, out_of_stock, coupon_invalid)."
+      description: "Error envelope. `code` is machine-readable (e.g. validation_failed, unauthorized, forbidden, not_found, conflict, rate_limited, csrf_invalid, out_of_stock, coupon_invalid, stock_conflict, stock_snapshot_required, slug_taken, sku_taken, migration_required, product_unavailable)."
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
   schemas:
     ErrorBody:
@@ -834,6 +837,7 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [in_stock, low_stock, out_of_stock] }
+        quantity: { type: integer, minimum: 0, description: "Exact units available for this size. Present ONLY on products whose `stockMessageMode` is `real`; never returned for `none` or `custom` products. 0 means out of stock." }
     Variant:
       type: object
       required: [id, sku, size, availability]
@@ -869,7 +873,9 @@ components:
         exchangeable: { type: boolean, description: Whether the product can be exchanged after delivery }
         codEnabled: { type: boolean, description: Whether Cash on Delivery is allowed for this product }
         onlinePaymentEnabled: { type: boolean, description: Whether Online Payment is allowed for this product }
-        stockMessage: { type: [string, 'null'], maxLength: 160, description: "Admin-written display text for the product page. Pure copy: never derived from, or used as, inventory." }
+        stockMessage: { type: [string, 'null'], maxLength: 160, description: "Admin-written display text for the product page. Public responses return it only when `stockMessageMode` is `real` (text shown after the real quantity) or `custom`. Pure copy: never derived from, or used as, inventory." }
+        stockMessageMode: { type: string, enum: [none, real, custom], description: "`real`: the product page shows the selected size's ACTUAL stock (`variants[].availability.quantity`) followed by `stockMessage`. `custom`: the page shows the admin-entered `stockMessageNumber` + `stockMessage` as promotional text; it is NOT inventory. `none`: no extra message. Absent on legacy data." }
+        stockMessageNumber: { type: [integer, 'null'], minimum: 0, maximum: 100000, description: "Promotional display number. Only ever non-null when `stockMessageMode` is `custom`. Never inventory: it does not affect availability, cart limits, checkout or Low Stock." }
         variants: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Variant' } }
         updatedAt: { type: string, format: date-time }
     ProductList:
@@ -1042,7 +1048,7 @@ components:
         unitPrice: { type: number }
         compareAt: { type: number }
         lineTotal: { type: number }
-        maxQuantity: { type: integer, description: Cap for this line (availability and purchase limit) }
+        maxQuantity: { type: integer, description: "Purchase cap for this line. For products in Real Stock mode it reflects actual availability (min of stock and the per-line limit). For every other product it is only the per-line purchase limit and never reveals stock; the server still enforces real stock." }
         issue: { type: [string, 'null'], enum: [out_of_stock, quantity_reduced, price_changed, null] }
     Totals:
       type: object
@@ -1254,6 +1260,7 @@ components:
             categoryId: { type: string }
             status: { type: string, enum: [active, draft] }
             variants: { type: array, items: { $ref: '#/components/schemas/AdminVariant' } }
+            stockMessageReview: { type: boolean, description: "True while a stock message written before stock modes existed has not been reviewed. Cleared when an admin changes the message or the mode and saves." }
     AdminProductList:
       type: object
       required: [items, total, page, pageSize]
@@ -1264,11 +1271,16 @@ components:
         pageSize: { type: integer }
     AdminProductInput:
       type: object
-      required: [name, slug, categoryId, price, compareAt, color, colorHex, images, fit, material, description, bestSeller, newArrival, luxe, status, variants]
+      required: [name, slug, categoryId, price, compareAt, color, colorHex, images, fit, material, description, bestSeller, newArrival, luxe, status]
+      description: "Stock is written only on explicit intent. Send `variants` (with `expectedStock` on updates) ONLY when a size quantity was intentionally changed, or when creating a product (required then). A save without `variants` never touches inventory."
       properties:
         returnable: { type: boolean }
         exchangeable: { type: boolean }
-        stockMessage: { type: [string, 'null'], maxLength: 160 }
+        codEnabled: { type: boolean }
+        onlinePaymentEnabled: { type: boolean }
+        stockMessage: { type: [string, 'null'], maxLength: 160, description: "Display text. In `real`/`custom` mode it must not state a quantity or scarcity (e.g. \"3 left\", \"Only 2 remaining\", \"Last piece\"): 422 validation_failed." }
+        stockMessageMode: { type: string, enum: [none, real, custom], description: "Exactly one mode. Omitted = unchanged." }
+        stockMessageNumber: { type: [integer, 'null'], minimum: 0, maximum: 100000, description: "Custom display number. Allowed ONLY with `stockMessageMode: custom` (otherwise 422); the database clears it for `real` and `none`. Never inventory." }
         name: { type: string }
         slug: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
         categoryId: { type: string }
@@ -1288,10 +1300,15 @@ components:
         variants:
           type: array
           minItems: 1
+          description: "Desired size quantities. Optional on updates (omit for message/metadata-only saves); required when creating. When present on an update, `expectedStock` is required."
           items:
             type: object
             required: [size, stock]
             properties: { size: { type: string }, sku: { type: [string, 'null'] }, stock: { type: integer, minimum: 0 } }
+        expectedStock:
+          type: object
+          description: "Stock per size exactly as loaded with the product (`AdminVariant.stock`). The server locks each size and compares: a size you changed is written only if live stock still equals this value, otherwise the whole save is rejected with 409 `stock_conflict` and nothing is saved. Sizes you did not change are never written."
+          additionalProperties: { type: integer, minimum: 0 }
     AdminPage:
       type: object
       required: [slug, title, body, published, updatedAt]
