@@ -85,17 +85,46 @@ jobs:
           cd /var/www/one2oneight
 
           OLD_IMAGE=$(docker inspect one21eight-web:production --format='{{.Id}}' 2>/dev/null || true)
+          OLD_SHA=$(git rev-parse HEAD 2>/dev/null || true)
+          DEPLOY_OK=0
 
           rollback() {
-            echo "Deployment failed. Attempting rollback..."
-
-            if [ -n "$OLD_IMAGE" ]; then
-              docker tag "$OLD_IMAGE" one21eight-web:production
-              docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate
+            # Best effort. Never exits the script, so it cannot hide the original failure.
+            if [ -z "$OLD_IMAGE" ]; then
+              echo "ROLLBACK SKIPPED: no previous image was found. Manual intervention required." >&2
+              return 1
             fi
+            echo "Rolling back to previous image ${OLD_IMAGE}..." >&2
+            if [ -n "$OLD_SHA" ]; then
+              git reset --hard "$OLD_SHA" || echo "Warning: could not restore previous checkout ${OLD_SHA}." >&2
+            fi
+            docker tag "$OLD_IMAGE" one21eight-web:production || return 1
+            docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate || return 1
+            for j in $(seq 1 12); do
+              if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
+                echo "Rollback complete: previous version is healthy." >&2
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Rollback finished but the previous version did not pass its health check." >&2
+            return 1
           }
 
-          trap rollback ERR
+          # Runs on ANY exit (command failure under set -e, or an explicit exit 1 after a failed health check).
+          on_exit() {
+            status=$?
+            trap - EXIT
+            if [ "$DEPLOY_OK" != "1" ]; then
+              [ "$status" -ne 0 ] || status=1
+              echo "Deployment FAILED (exit code ${status})." >&2
+              if ! rollback; then
+                echo "ROLLBACK FAILED. The site may be down: check the VPS immediately." >&2
+              fi
+            fi
+            exit "$status"
+          }
+          trap on_exit EXIT
 
           git fetch origin feature/supabase-api
           git reset --hard "$GITHUB_SHA"
@@ -106,7 +135,7 @@ jobs:
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
               echo "Production deployment healthy."
-              trap - ERR
+              DEPLOY_OK=1
               exit 0
             fi
 
