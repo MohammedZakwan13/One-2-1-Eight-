@@ -9,7 +9,7 @@ import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { Footer } from '@/components/storefront/footer';
-import { formatProductPaymentNote, formatProductPolicyBadge, formatProductShippingPolicy, money, slugify } from '@/lib/format';
+import { formatProductPaymentNote, formatProductPolicyBadge, formatProductReturnExchangePolicy, formatStoreShippingPolicy, money, slugify } from '@/lib/format';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
@@ -83,7 +83,8 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
   const isPurchasable = (product.codEnabled !== false) || (product.onlinePaymentEnabled !== false);
   const policyBadge = formatProductPolicyBadge(product);
   const paymentNote = formatProductPaymentNote(product);
-  const shippingPolicyContent = formatProductShippingPolicy(product, settings);
+  const returnExchangePolicyContent = formatProductReturnExchangePolicy(product, settings);
+  const shippingPolicyContent = formatStoreShippingPolicy(settings);
 
   const add = (goToCheckout = false) => {
     if (!isPurchasable) {
@@ -157,7 +158,8 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
         <form className="delivery-check" onSubmit={checkDelivery}><label htmlFor="delivery-pin"><MapPin size={15} /> DELIVERY CHECK</label><div className="pin-input-row"><input id="delivery-pin" inputMode="numeric" maxLength={6} value={deliveryPin} onChange={e => { setDeliveryPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeliveryMessage(''); }} placeholder="Enter 6-digit pincode" /><button type="submit">CHECK <ArrowRight size={14} /></button></div>{deliveryMessage && <p className={`delivery-response ${deliveryMessage.startsWith('Good') ? 'available' : 'unavailable'}`}>{deliveryMessage}</p>}</form>
         <div className="product-accordions">{[
           { id: 'description', title: 'DESCRIPTION & FIT', content: <><p>{product.description}</p><ul><li>Fit: {product.fit}</li><li>Material: {product.material}</li><li>Model is styled for an editorial look; use the size guide to select your preferred fit.</li></ul></> },
-          { id: 'shipping', title: 'SHIPPING & RETURNS', content: <p>{shippingPolicyContent}</p> },
+          { id: 'returns', title: 'RETURNS & EXCHANGES', content: <p>{returnExchangePolicyContent}</p> },
+          { id: 'shipping', title: 'SHIPPING', content: <p>{shippingPolicyContent}</p> },
           { id: 'care', title: 'CARE GUIDE', content: <p>Wash inside out with similar colours. Use a gentle cold wash, avoid bleach and tumble drying, and dry in shade to help preserve colour and shape.</p> },
         ].map(item => <div className={`product-accordion ${activeAccordion === item.id ? 'open' : ''}`} key={item.id}><button onClick={() => setActiveAccordion(current => current === item.id ? '' : item.id)}><span>{item.title}</span>{activeAccordion === item.id ? <Minus size={17} /> : <Plus size={17} />}</button>{activeAccordion === item.id && <div className="accordion-content">{item.content}</div>}</div>)}</div>
       </section>

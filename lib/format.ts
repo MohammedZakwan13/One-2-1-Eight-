@@ -72,29 +72,49 @@ export function formatInstagramUrl(url: string | null | undefined): string | nul
 }
 
 /**
- * Generates the Shipping & Returns policy content dynamically based on product returnable/exchangeable settings.
+ * Generates the Returns & Exchanges policy content dynamically based on product returnable/exchangeable settings.
+ * Purely product-level policy: does NOT include store shipping copy.
+ */
+export function formatProductReturnExchangePolicy(
+  product: { returnable?: boolean; exchangeable?: boolean },
+  settings: { returnPolicy?: string }
+): string {
+  const isReturnable = product.returnable !== false;
+  const isExchangeable = product.exchangeable !== undefined ? product.exchangeable : isReturnable;
+
+  if (isReturnable && isExchangeable) {
+    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
+    return `Eligible for returns and size/colour exchanges.${policy}`;
+  }
+  if (isReturnable && !isExchangeable) {
+    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
+    return `Eligible for returns only (exchanges are not offered for this product).${policy}`;
+  }
+  if (!isReturnable && isExchangeable) {
+    return 'Eligible for size and colour exchanges only within 7 days of delivery. This product is non-returnable and cannot be returned once delivered. Items must be unworn, unwashed and in their original packaging.';
+  }
+  return 'This product is non-returnable and non-exchangeable.';
+}
+
+/**
+ * Generates the Storefront Shipping policy content.
+ * Purely storefront shipping copy: independent of product return/exchange flags.
+ */
+export function formatStoreShippingPolicy(settings: { freeShippingThreshold?: number }): string {
+  const threshold = settings.freeShippingThreshold ?? 1499;
+  return `Complimentary shipping over ₹${threshold.toLocaleString('en-IN')}. Delivery timelines shown after a valid pincode check are estimates.`;
+}
+
+/**
+ * Generates combined Shipping & Returns policy content (backward compatible).
  */
 export function formatProductShippingPolicy(
   product: { returnable?: boolean; exchangeable?: boolean },
   settings: { returnPolicy?: string; freeShippingThreshold?: number }
 ): string {
-  const isReturnable = product.returnable !== false;
-  const isExchangeable = product.exchangeable !== undefined ? product.exchangeable : isReturnable;
-  const threshold = settings.freeShippingThreshold ?? 1499;
-  const shippingText = `Complimentary shipping over ₹${threshold.toLocaleString('en-IN')}. Delivery timelines shown after a valid pincode check are estimates.`;
-
-  if (isReturnable && isExchangeable) {
-    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
-    return `Eligible for returns and size/colour exchanges.${policy} ${shippingText}`;
-  }
-  if (isReturnable && !isExchangeable) {
-    const policy = settings.returnPolicy ? ` ${settings.returnPolicy}` : '';
-    return `Eligible for returns only (exchanges are not offered for this product).${policy} ${shippingText}`;
-  }
-  if (!isReturnable && isExchangeable) {
-    return `Eligible for size and colour exchanges only within 7 days of delivery. This product is non-returnable and cannot be returned once delivered. Items must be unworn, unwashed and in their original packaging. ${shippingText}`;
-  }
-  return `This product is non-returnable and non-exchangeable. ${shippingText}`;
+  const ret = formatProductReturnExchangePolicy(product, settings);
+  const ship = formatStoreShippingPolicy(settings);
+  return `${ret} ${ship}`;
 }
 
 /**

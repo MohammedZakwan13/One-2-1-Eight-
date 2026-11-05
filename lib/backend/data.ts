@@ -56,10 +56,11 @@ export async function toProducts(rows: Row[], settings: Row): Promise<Product[]>
       id: r.id, slug: r.slug, name: r.name, category: r.categories.name, categorySlug: r.categories.slug, price: Number(r.price), compareAt: Number(r.compare_at),
       color: r.color, colorHex: r.color_hex, rating: stat ? Math.round((stat.sum / stat.count) * 10) / 10 : 0, reviewCount: stat?.count ?? 0, badge: r.badge,
       images: (r.images as string[]).map(imageUrl), fit: r.fit, material: r.material, description: r.description, bestSeller: r.best_seller, newArrival: r.new_arrival, luxe: r.luxe,
-      stockMessage: r.stock_message ?? null, returnable: r.returnable ?? true,
-      exchangeable: r.exchangeable ?? r.returnable ?? true,
-      codEnabled: r.cod_enabled ?? true,
-      onlinePaymentEnabled: r.online_payment_enabled ?? true,
+      stockMessage: r.stock_message ?? null,
+      returnable: r.returnable === false ? false : (r.returnable ?? true),
+      exchangeable: r.exchangeable === false ? false : (r.exchangeable ?? (r.returnable === false ? false : true)),
+      codEnabled: r.cod_enabled === false ? false : (r.cod_enabled ?? true),
+      onlinePaymentEnabled: r.online_payment_enabled === false ? false : (r.online_payment_enabled ?? true),
       variants: activeVariants(r).map(v => ({ id: v.id, sku: v.sku, size: v.size, availability: availability(v.stock, threshold) })),
       updatedAt: r.updated_at,
     };
@@ -133,10 +134,10 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
       await db().from('cart_items').update({ quantity }).eq('id', item.id);
     }
     const price = Number(product.price);
-    const returnable = product.returnable ?? true;
-    const exchangeable = product.exchangeable ?? product.returnable ?? true;
-    const codEnabled = product.cod_enabled ?? true;
-    const onlinePaymentEnabled = product.online_payment_enabled ?? true;
+    const returnable = product.returnable === false ? false : (product.returnable ?? true);
+    const exchangeable = product.exchangeable === false ? false : (product.exchangeable ?? (product.returnable === false ? false : true));
+    const codEnabled = product.cod_enabled === false ? false : (product.cod_enabled ?? true);
+    const onlinePaymentEnabled = product.online_payment_enabled === false ? false : (product.online_payment_enabled ?? true);
     if (!codEnabled && !onlinePaymentEnabled) {
       issue = 'out_of_stock';
       blocked = true;
@@ -153,6 +154,7 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
   const hasLuxe = items.some(item => item.product_variants?.products?.luxe);
 
   const availableStoreMethods = paymentMethods();
+  const onlineGatewayConfigured = availableStoreMethods.includes('upi') || availableStoreMethods.includes('card');
   const codAllowed = payable.length > 0 && payable.every(line => line.codEnabled !== false);
   const onlineAllowed = payable.length > 0 && payable.every(line => line.onlinePaymentEnabled !== false);
   const allowedPaymentMethods: Array<'upi' | 'card' | 'cod'> = [];
@@ -163,11 +165,15 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
     if (availableStoreMethods.includes('upi')) allowedPaymentMethods.push('upi');
     if (availableStoreMethods.includes('card')) allowedPaymentMethods.push('card');
   }
-  let paymentConflict = false;
-  if (payable.length > 0 && allowedPaymentMethods.length === 0) {
-    paymentConflict = true;
+  const paymentConflict = payable.length > 0 && !codAllowed && !onlineAllowed;
+  const onlineConfiguring = payable.length > 0 && onlineAllowed && !codAllowed && !onlineGatewayConfigured;
+
+  if (paymentConflict) {
     blocked = true;
     messages.push('Items in your bag have conflicting payment options (some allow only Cash on Delivery, while others allow only Online Payment). Please purchase them separately.');
+  } else if (onlineConfiguring) {
+    blocked = true;
+    messages.push('Online payment is currently being configured. Cash on delivery is unavailable for one or more items in your bag.');
   }
 
   let discount = 0;
@@ -183,7 +189,7 @@ export async function priceCart(cartId: string): Promise<PricedCart> {
   const threshold = Number(settings.free_shipping_threshold);
   const shipping = subtotal === 0 || subtotal - discount >= threshold ? 0 : Number(settings.shipping_fee);
   return {
-    cart: { id: cartId, currency: 'INR', lines, coupon, totals: { subtotal, discount, shipping, total: Math.max(0, subtotal - discount + shipping) }, freeShippingThreshold: threshold, messages, allowedPaymentMethods, paymentConflict },
+    cart: { id: cartId, currency: 'INR', lines, coupon, totals: { subtotal, discount, shipping, total: Math.max(0, subtotal - discount + shipping) }, freeShippingThreshold: threshold, messages, allowedPaymentMethods, paymentConflict, codAllowed, onlineAllowed, onlineGatewayConfigured },
     blocked: blocked || messages.some(m => m.startsWith('Only')),
     coupon: coupon?.code ?? null,
   };
@@ -209,7 +215,7 @@ export function toOrder(r: Row): Order {
     id: r.id, number: r.number, status: r.status, paymentStatus: r.payment_status, paymentMethod: r.payment_method, currency: 'INR',
     totals: { subtotal: Number(r.subtotal), discount: Number(r.discount), shipping: Number(r.shipping), total: Number(r.total) },
     lines: (r.order_items ?? []).map((i: Row) => ({
-      id: i.id, returnable: i.returnable ?? true, exchangeable: i.exchangeable ?? i.returnable ?? true, productId: i.product_id, variantId: i.variant_id, name: i.name, image: imageUrl(i.image), size: i.size, color: i.color, quantity: i.quantity, unitPrice: Number(i.unit_price), lineTotal: Number(i.line_total),
+      id: i.id, returnable: i.returnable === false ? false : (i.returnable ?? true), exchangeable: i.exchangeable === false ? false : (i.exchangeable ?? (i.returnable === false ? false : true)), productId: i.product_id, variantId: i.variant_id, name: i.name, image: imageUrl(i.image), size: i.size, color: i.color, quantity: i.quantity, unitPrice: Number(i.unit_price), lineTotal: Number(i.line_total),
     })),
     contact: r.contact, shippingAddress: r.shipping_address, createdAt: r.created_at,
     history: history.map((h: Row) => ({ status: h.to_status, at: h.created_at, note: h.actor_type === 'admin' ? null : h.note })),

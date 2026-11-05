@@ -11,29 +11,14 @@ import { SmartImage } from '@/components/ui/smart-image';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import { adminProductInputSchema, type AdminProduct, type AdminProductInput } from '@/lib/api/schemas';
+import { adminProductToDraft, SIZE_OPTIONS, type AdminProductDraft } from '@/lib/catalog';
 import { money, slugify } from '@/lib/format';
+import { COLOR_SWATCHES, colorToHex, FIT_OPTIONS, MATERIAL_OPTIONS, matchesMerchFilters, MERCH_FILTERS, type MerchFlag } from '@/lib/product-options';
 
-const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL'];
 const totalStock = (product: AdminProduct) => product.variants.reduce((sum, variant) => sum + variant.stock, 0);
 
-type Draft = {
-  id?: string; name: string; slug: string; categoryId: string; price: number; compareAt: number; color: string; colorHex: string; badge: string;
-  images: string[]; stockMessage: string; returnable: boolean; exchangeable: boolean; codEnabled: boolean; onlinePaymentEnabled: boolean;
-  fit: string; material: string; description: string; bestSeller: boolean; newArrival: boolean; luxe: boolean;
-  status: 'active' | 'draft'; stock: Record<string, string>;
-};
-
-const fromProduct = (product: AdminProduct): Draft => ({
-  id: product.id, name: product.name, slug: product.slug, categoryId: product.categoryId, price: product.price, compareAt: product.compareAt, color: product.color,
-  colorHex: product.colorHex, badge: product.badge ?? '', images: product.images, stockMessage: product.stockMessage ?? '',
-  returnable: product.returnable !== false,
-  exchangeable: product.exchangeable !== false,
-  codEnabled: product.codEnabled !== false,
-  onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
-  fit: product.fit, material: product.material, description: product.description,
-  bestSeller: product.bestSeller, newArrival: product.newArrival, luxe: product.luxe, status: product.status,
-  stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, String(product.variants.find(variant => variant.size === size)?.stock ?? '')])),
-});
+type Draft = AdminProductDraft;
+const fromProduct = adminProductToDraft;
 
 export function AdminProducts() {
   const { notify } = useUi();
@@ -46,6 +31,8 @@ export function AdminProducts() {
   const categories = categoriesQuery.data?.items ?? [];
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
+  const [merchFilters, setMerchFilters] = useState<MerchFlag[]>([]);
+  const toggleMerch = (flag: MerchFlag) => setMerchFilters(current => (current.includes(flag) ? current.filter(item => item !== flag) : [...current, flag]));
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
@@ -57,7 +44,19 @@ export function AdminProducts() {
   const refresh = () => Promise.all([client.invalidateQueries({ queryKey: ['admin', 'products'] }), client.invalidateQueries({ queryKey: ['admin', 'dashboard'] })]);
   const saveMutation = useMutation({
     mutationFn: (input: { id?: string; body: AdminProductInput }) => (input.id ? api.admin.products.update(input.id, input.body) : api.admin.products.create(input.body)),
-    onSuccess: async saved => { await refresh(); setSelectedId(saved.id); setShowForm(false); notify('Product saved — storefront updated.'); },
+    onSuccess: async saved => {
+      client.setQueryData(['admin', 'products'], (old: { items: AdminProduct[]; total: number; page: number; pageSize: number } | undefined) => {
+        if (!old) return old;
+        const exists = old.items.some(p => p.id === saved.id);
+        const items = exists ? old.items.map(p => (p.id === saved.id ? saved : p)) : [saved, ...old.items];
+        return { ...old, items, total: exists ? old.total : old.total + 1 };
+      });
+      setDraft(fromProduct(saved));
+      setSelectedId(saved.id);
+      setShowForm(false);
+      await refresh();
+      notify('Product saved — storefront updated.');
+    },
     onError: failure => setFormErrors([errorMessage(failure)]),
   });
   const removeMutation = useMutation({
@@ -66,10 +65,10 @@ export function AdminProducts() {
     onError: failure => notify(errorMessage(failure)),
   });
 
-  const filtered = products.filter(product => `${product.name} ${product.category} ${product.id}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = products.filter(product => `${product.name} ${product.category} ${product.id}`.toLowerCase().includes(query.toLowerCase()) && matchesMerchFilters(product, merchFilters));
   const startNew = () => {
     setShowForm(true); setSelectedId(''); setFormErrors([]);
-    setDraft({ name: '', slug: '', categoryId: categories[0]?.id ?? '', price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', returnable: true, exchangeable: true, codEnabled: true, onlinePaymentEnabled: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'draft', stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])) });
+    setDraft({ name: '', slug: '', categoryId: categories[0]?.id ?? '', price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', returnable: true, exchangeable: true, codEnabled: true, onlinePaymentEnabled: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'active', stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])) });
   };
   const patch = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(current => (current ? { ...current, [key]: value } : current));
   const save = (event: FormEvent) => {
@@ -101,28 +100,28 @@ export function AdminProducts() {
   return <AdminDataState isLoading={productsQuery.isLoading || categoriesQuery.isLoading} error={productsQuery.error ?? categoriesQuery.error} retry={() => { void productsQuery.refetch(); void categoriesQuery.refetch(); }}>
     <div className="admin-tab-content"><div className="admin-page-heading"><div><span className="eyebrow">MERCHANDISE / CATALOGUE</span><h1>Products <span className="admin-count-chip">{products.length}</span></h1><p>Manage product details, imagery, pricing, availability and merchandising flags.</p></div><button className="admin-primary-btn" onClick={startNew}><Plus size={16} /> Add product</button></div>
       <div className="admin-products-layout">
-        <section className="admin-card admin-product-list-card"><div className="admin-list-toolbar"><div className="admin-input-icon"><Search size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search catalogue" aria-label="Search catalogue" /></div><span>{filtered.length} products</span></div><div className="admin-product-list">{filtered.map(product => <button key={product.id} className={`admin-product-list-row ${selectedId === product.id && !showForm ? 'active' : ''}`} onClick={() => { setShowForm(false); setFormErrors([]); setSelectedId(product.id); }}><SmartImage src={product.images[0]} alt={product.name} /><span><strong>{product.name}</strong><small>{product.category} · {product.color}{product.status === 'draft' ? ' · Draft' : ''}</small><em>{money(product.price)}</em></span><span className={`stock-indicator ${product.variants.some(variant => variant.stock <= lowAt) ? 'stock-low' : ''}`}>{totalStock(product)} in stock</span></button>)}</div></section>
+        <section className="admin-card admin-product-list-card"><div className="admin-list-toolbar"><div className="admin-input-icon"><Search size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search catalogue" aria-label="Search catalogue" /></div><span>{filtered.length} products</span></div><div className="admin-merch-filters" role="group" aria-label="Filter by merchandising"><button type="button" className={merchFilters.length === 0 ? 'active' : ''} aria-pressed={merchFilters.length === 0} onClick={() => setMerchFilters([])}>All products</button>{MERCH_FILTERS.map(item => <button type="button" key={item.key} className={merchFilters.includes(item.key) ? 'active' : ''} aria-pressed={merchFilters.includes(item.key)} onClick={() => toggleMerch(item.key)}>{item.label}</button>)}</div><div className="admin-product-list">{filtered.length === 0 && <p className="admin-field-note">No products match your search and filters.</p>}{filtered.map(product => <button key={product.id} className={`admin-product-list-row ${selectedId === product.id && !showForm ? 'active' : ''}`} onClick={() => { setShowForm(false); setFormErrors([]); setSelectedId(product.id); }}><SmartImage src={product.images[0]} alt={product.name} /><span><strong>{product.name}</strong><small>{product.category} · {product.color}{product.status === 'draft' ? ' · Draft' : ''}</small><em>{money(product.price)}</em></span><span className={`stock-indicator ${product.variants.some(variant => variant.stock <= lowAt) ? 'stock-low' : ''}`}>{totalStock(product)} in stock</span></button>)}</div></section>
         <section className="admin-card admin-product-editor"><div className="admin-card-heading"><div><span className="eyebrow">{showForm ? 'NEW PRODUCT' : 'PRODUCT EDITOR'}</span><h2>{showForm ? 'Create a piece' : selected?.name || 'Select a product'}</h2></div>{!showForm && selected && <button className="admin-danger-quiet" onClick={remove} disabled={removeMutation.isPending}>DELETE</button>}</div>
           {draft && (selected || showForm) ? <form onSubmit={save} className="admin-edit-form">
             <label>Product name<input required maxLength={200} value={draft.name} onChange={e => patch('name', e.target.value)} placeholder="Product name" /></label>
             <div className="admin-form-two"><label>URL slug<input value={draft.slug} onChange={e => patch('slug', e.target.value)} placeholder="auto-generated from the name" /></label><label>Category<select value={draft.categoryId} onChange={e => patch('categoryId', e.target.value)}>{categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label></div>
             <div className="admin-form-three"><label>Price (₹)<input type="number" min="0" step="1" value={draft.price} onChange={e => patch('price', Number(e.target.value))} /></label><label>Compare-at (₹)<input type="number" min="0" step="1" value={draft.compareAt} onChange={e => patch('compareAt', Number(e.target.value))} /></label><label>Status<select value={draft.status} onChange={e => patch('status', e.target.value as Draft['status'])}><option value="active">Active (visible)</option><option value="draft">Draft (hidden)</option></select></label></div>
+            <fieldset className="admin-feature-flags"><legend>Merchandising</legend>{[{ key: 'bestSeller', label: 'Best seller' }, { key: 'newArrival', label: 'New arrival' }, { key: 'luxe', label: 'Luxe collection' }].map(item => <label key={item.key}><input type="checkbox" checked={Boolean(draft[item.key as 'bestSeller'])} onChange={e => patch(item.key as 'bestSeller', e.target.checked)} />{item.label}</label>)}</fieldset>
             <fieldset className="admin-feature-flags admin-size-stock"><legend>Real stock by size (leave blank if the size is not offered)</legend>{SIZE_OPTIONS.map(size => <label key={size}>{size}<input type="number" min="0" step="1" value={draft.stock[size]} onChange={e => patch('stock', { ...draft.stock, [size]: e.target.value })} aria-label={`Stock for size ${size}`} /></label>)}</fieldset>
             <fieldset className="admin-feature-flags"><legend>Returns & Exchanges</legend>
-              <label className="admin-check"><input type="checkbox" checked={draft.returnable} onChange={e => patch('returnable', e.target.checked)} /> Returnable product<small>When off, customers cannot request a return for this product. Orders already placed keep the setting that applied when they were bought.</small></label>
-              <label className="admin-check"><input type="checkbox" checked={draft.exchangeable} onChange={e => patch('exchangeable', e.target.checked)} /> Exchangeable product<small>When off, customers cannot request a size or colour exchange for this product.</small></label>
+              <label className="admin-check"><input type="checkbox" checked={draft.returnable} onChange={e => patch('returnable', e.target.checked)} /> Returnable product</label>
+              <label className="admin-check"><input type="checkbox" checked={draft.exchangeable} onChange={e => patch('exchangeable', e.target.checked)} /> Exchangeable product</label>
             </fieldset>
             <fieldset className="admin-feature-flags"><legend>Payment Methods</legend>
-              <label className="admin-check"><input type="checkbox" checked={draft.codEnabled} onChange={e => patch('codEnabled', e.target.checked)} /> Cash on Delivery (COD)<small>Allow customers to pay via Cash on Delivery for this product.</small></label>
-              <label className="admin-check"><input type="checkbox" checked={draft.onlinePaymentEnabled} onChange={e => patch('onlinePaymentEnabled', e.target.checked)} /> Online Payment<small>Allow customers to pay via UPI, cards, and netbanking for this product.</small></label>
+              <label className="admin-check"><input type="checkbox" checked={draft.codEnabled} onChange={e => patch('codEnabled', e.target.checked)} /> Cash on Delivery (COD)</label>
+              <label className="admin-check"><input type="checkbox" checked={draft.onlinePaymentEnabled} onChange={e => patch('onlinePaymentEnabled', e.target.checked)} /> Online Payment</label>
             </fieldset>
             <label>Stock message on the storefront<input maxLength={160} value={draft.stockMessage} onChange={e => patch('stockMessage', e.target.value)} placeholder="Enter the message customers should see on this product" /><small>Display text only, shown on the product page exactly as written. It never changes real stock, availability or low-stock alerts. Leave empty to show nothing.</small></label>
-            <div className="admin-form-two"><label>Colour name<input value={draft.color} onChange={e => patch('color', e.target.value)} /></label><label>Colour swatch<input type="color" value={draft.colorHex} onChange={e => patch('colorHex', e.target.value)} /></label></div>
+            <div className="admin-form-two"><label>Colour name<input list="admin-color-options" value={draft.color} onChange={e => { const name = e.target.value; const hex = colorToHex(name); setDraft(current => (current ? { ...current, color: name, colorHex: hex ?? current.colorHex } : current)); }} placeholder="Pick or type a colour, or a #hex" /><datalist id="admin-color-options">{Object.keys(COLOR_SWATCHES).map(name => <option key={name} value={name} />)}</datalist></label><label>Colour swatch<input type="color" value={draft.colorHex} onChange={e => patch('colorHex', e.target.value)} /></label></div>
             <ImageUploader label="Product images" images={draft.images} onChange={images => patch('images', images)} hint="The first image is the primary image shown on cards. JPEG, PNG, WebP or AVIF · up to 4 MB each." />
             <label>Badge (optional)<input maxLength={40} value={draft.badge} onChange={e => patch('badge', e.target.value)} placeholder="e.g. NEW DROP" /></label>
             <label>Description<textarea rows={4} maxLength={5000} value={draft.description} onChange={e => patch('description', e.target.value)} placeholder="Product description" /></label>
-            <div className="admin-form-two"><label>Fit<input value={draft.fit} onChange={e => patch('fit', e.target.value)} /></label><label>Material<input value={draft.material} onChange={e => patch('material', e.target.value)} /></label></div>
-            <fieldset className="admin-feature-flags"><legend>Merchandising</legend>{[{ key: 'bestSeller', label: 'Best seller' }, { key: 'newArrival', label: 'New arrival' }, { key: 'luxe', label: 'Luxe collection' }].map(item => <label key={item.key}><input type="checkbox" checked={Boolean(draft[item.key as 'bestSeller'])} onChange={e => patch(item.key as 'bestSeller', e.target.checked)} />{item.label}</label>)}</fieldset>
+            <div className="admin-form-two"><label>Fit<input list="admin-fit-options" value={draft.fit} onChange={e => patch('fit', e.target.value)} placeholder="Select or type a fit" /><datalist id="admin-fit-options">{FIT_OPTIONS.map(option => <option key={option} value={option} />)}</datalist></label><label>Material<input list="admin-material-options" value={draft.material} onChange={e => patch('material', e.target.value)} placeholder="Select or type a material" /><datalist id="admin-material-options">{MATERIAL_OPTIONS.map(option => <option key={option} value={option} />)}</datalist></label></div>
             {formErrors.length > 0 && <div className="form-error-banner" role="alert">{formErrors.map(message => <p key={message}>{message}</p>)}</div>}
             <button className="admin-primary-btn admin-save-btn" type="submit" disabled={saveMutation.isPending}><Check size={16} /> {saveMutation.isPending ? 'Saving…' : 'Save product & publish'}</button>
             <p className="admin-field-note"><ShieldCheck size={13} /> Changes are validated and saved by the server; the storefront shows them after its cache refreshes.</p>

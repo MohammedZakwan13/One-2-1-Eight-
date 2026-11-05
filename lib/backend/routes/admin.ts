@@ -67,7 +67,12 @@ route('GET', '/admin/dashboard/summary', async ctx => {
 const productPayload = (input: z.infer<typeof adminProductInputSchema>, id?: string) => ({
   id: id ?? '', slug: input.slug, name: input.name, category_id: input.categoryId, price: input.price, compare_at: input.compareAt, color: input.color, color_hex: input.colorHex,
   badge: input.badge ?? '', images: input.images.map(storedImage), fit: input.fit, material: input.material, description: input.description, best_seller: input.bestSeller,
-  new_arrival: input.newArrival, luxe: input.luxe, status: input.status, stock_display: 'status', stock_message: input.stockMessage?.trim() ?? '', variants: input.variants.map(v => ({ size: v.size, sku: v.sku ?? '', stock: v.stock })),
+  new_arrival: input.newArrival, luxe: input.luxe, status: input.status, stock_display: 'status', stock_message: input.stockMessage?.trim() ?? '',
+  returnable: input.returnable === false ? false : true,
+  exchangeable: input.exchangeable === false ? false : true,
+  cod_enabled: input.codEnabled === false ? false : true,
+  online_payment_enabled: input.onlinePaymentEnabled === false ? false : true,
+  variants: input.variants.map(v => ({ size: v.size, sku: v.sku ?? '', stock: v.stock })),
 });
 
 async function adminProductById(id: string) {
@@ -89,6 +94,12 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
     const probe = await db().from('products').select('returnable').limit(1);
     if (probe.error) throw new HttpError(503, 'migration_required', 'The returnable setting needs database migration 0005. Ask the developer to apply it.');
   }
+  if (input.exchangeable === false || input.codEnabled === false || input.onlinePaymentEnabled === false) {
+    const probe = await db().from('products').select('exchangeable, cod_enabled, online_payment_enabled').limit(1);
+    if (probe.error?.code === '42703' || /exchangeable|cod_enabled|online_payment_enabled/.test(probe.error?.message ?? '')) {
+      throw new HttpError(503, 'migration_required', 'Product policy and payment method controls require database migration 0006. Please apply supabase/migrations/0006_product_policies_payments.sql.');
+    }
+  }
   const oldImages: string[] = id ? ((await db().from('products').select('images').eq('id', id).maybeSingle()).data?.images ?? []) : [];
   const { data, error } = await db().rpc('save_product', { p: productPayload(input, id), p_actor: adminId });
   if (error) {
@@ -106,7 +117,13 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
   if (typeof input.onlinePaymentEnabled === 'boolean') updates.online_payment_enabled = input.onlinePaymentEnabled;
   if (Object.keys(updates).length > 0) {
     const result = await db().from('products').update(updates).eq('id', data as string);
-    if (result.error && result.error.code !== '42703') console.error('[backend] product policy update', result.error.message);
+    if (result.error) {
+      if (result.error.code === '42703') {
+        throw new HttpError(503, 'migration_required', 'Product policy and payment method controls require database migration 0006. Please apply supabase/migrations/0006_product_policies_payments.sql.');
+      }
+      console.error('[backend] product policy update', result.error.message);
+      throw new HttpError(500, 'server_error', 'Failed to update product policies.');
+    }
   }
   const kept = new Set(input.images.map(storedImage));
   await removeStorageObjects(oldImages.filter(path => !kept.has(path)));

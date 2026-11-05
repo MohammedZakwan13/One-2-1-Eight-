@@ -11928,3 +11928,119 @@ button {
 /* MSG91 widget CAPTCHA mount (hCaptcha checkbox) */
 .msg91-captcha{display:flex;justify-content:center;margin:14px 0 4px;max-width:100%;overflow:hidden}
 .msg91-captcha:empty{display:none}
+
+
+/* Payment method notes and conflict banners */
+.payment-method-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding: 10px 14px;
+  background: #fbfbf9;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #63645e;
+}
+
+.payment-conflict-banner {
+  margin: 14px 0;
+  padding: 18px 20px;
+  border: 1px solid #e8c7c2;
+  border-radius: var(--radius);
+  background: #fdf6f5;
+  color: #2b2b28;
+}
+
+.conflict-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b33927;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.conflict-explanation {
+  font-size: 12px;
+  color: #55534e;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.conflict-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #ebd8d5;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.conflict-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7d443b;
+}
+
+.conflict-group ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #3b3a36;
+}
+
+.conflict-action-text {
+  font-size: 11px;
+  color: #7a756d;
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+
+.separate-bag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 10px 18px;
+  text-decoration: none;
+}
+
+.payment-configuring-banner {
+  margin: 14px 0;
+  padding: 18px 20px;
+  border: 1px solid #e4dfd3;
+  background: #faf8f5;
+  color: #2b2b28;
+}
+
+.configuring-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #765c41;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.payment-configuring-banner p {
+  font-size: 12px;
+  color: #55534e;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.payment-configuring-banner a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.admin-merch-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.admin-merch-filters button { padding: 6px 12px; border: 1px solid var(--line, #d8d4cc); border-radius: 999px; background: transparent; font-size: 12px; cursor: pointer; }
+.admin-merch-filters button.active { background: var(--ink, #1a1a1a); border-color: var(--ink, #1a1a1a); color: #fff; }

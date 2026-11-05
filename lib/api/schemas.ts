@@ -271,6 +271,9 @@ export const cartSchema = z.object({
   messages: z.array(z.string()),
   allowedPaymentMethods: z.array(paymentMethodSchema).optional(),
   paymentConflict: z.boolean().optional(),
+  codAllowed: z.boolean().optional(),
+  onlineAllowed: z.boolean().optional(),
+  onlineGatewayConfigured: z.boolean().optional(),
 });
 export type Cart = z.infer<typeof cartSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
