@@ -858,21 +858,45 @@ button {
   transform: scale(1.045);
 }
 
+/* Box that matches the visible photo (object-fit: contain) inside the square frame; tags are positioned inside it. */
+.product-card-media { container-type: size; }
+
+.product-card-image-box {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  z-index: 2;
+  width: min(100cqw, calc(100cqh * var(--img-ratio, 1)));
+  height: min(100cqh, calc(100cqw / var(--img-ratio, 1)));
+  pointer-events: none;
+}
+
+/* Tags stack at the photo's top-left and stop short of the wishlist button. */
+.product-card-tags {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: min(calc(100% - 16px), calc(100cqw - 64px - (100cqw - 100%) / 2));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .product-badge,
 .discount-badge {
-  position: absolute;
-  top: 12px;
-  left: 11px;
-  z-index: 2;
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 6px 8px;
   background: rgba(248, 247, 243, .94);
   font-size: 7px;
+  line-height: 1.3;
   letter-spacing: .13em;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .discount-badge {
-  top: 40px;
   background: var(--ink);
   color: white;
 }
@@ -7338,16 +7362,16 @@ button {
     background: #ffffff;
   }
 
-  .product-badge,
-  .discount-badge {
-    top: 7px;
-    left: 7px;
-    padding: 5px 6px;
-    font-size: 6px;
+  .product-card-tags {
+    top: 6px;
+    left: 6px;
+    gap: 3px;
   }
 
+  .product-badge,
   .discount-badge {
-    top: 29px;
+    padding: 5px 6px;
+    font-size: 6px;
   }
 
   .wishlist-float {
@@ -12083,3 +12107,74 @@ button {
 }
 .stock-note-custom { font-style: italic; opacity: .85; }
 .stock-note-tag { display: inline-block; margin-right: 8px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 3px; font-size: 10px; font-style: normal; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+
+/* ───── Admin dashboard: main column + sidebar (Quick actions, then Quick observation) ───── */
+.admin-dashboard-main, .admin-dashboard-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; align-self: start; }
+.admin-dashboard-main > .admin-card, .admin-dashboard-side > .admin-card { grid-column: auto; grid-row: auto !important; align-self: stretch; }
+.admin-dashboard-side .admin-quick-actions { padding-bottom: 6px; }
+@media (max-width: 1020px) { .admin-dashboard-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ───── Admin status / filter selects: same size and weight as the other admin controls ───── */
+/* Root cause of the tiny Update dropdown: `.admin-table-spacious td select` forced 8px (7px on mobile) and out-ranked the admin type scale. */
+.admin-app select.admin-status-select,
+.admin-app select.admin-filter-select { height: 40px; min-height: 40px; padding: 0 12px; font-size: var(--admin-fs-input); color: var(--admin-ink, #21252e); border: 1px solid #d8d4cc; border-radius: 6px; background-color: #fff; }
+.admin-app select.admin-status-select { min-width: 150px; max-width: 100%; }
+.admin-app select.admin-filter-select { min-width: 160px; }
+.admin-app .admin-list-toolbar .admin-filter-select { margin-left: auto; }
+
+/* ───── Admin pagination ───── */
+.admin-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 20px; border-top: 1px solid #e4e7eb; }
+.admin-pagination[aria-busy="true"] { opacity: .65; }
+.admin-pagination-summary { margin: 0; font-size: var(--admin-fs-label); color: var(--admin-muted, #5d584e); }
+.admin-pagination-summary strong { color: var(--admin-ink, #21252e); }
+.admin-pagination-size { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: var(--admin-fs-label); color: var(--admin-muted, #5d584e); flex-direction: row; }
+.admin-app .admin-pagination-size select { height: 36px; min-height: 36px; padding: 0 8px; font-size: var(--admin-fs-label); border: 1px solid #d8d4cc; border-radius: 6px; background: #fff; }
+.admin-pagination-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+.admin-pagination-pages button { min-width: 36px; height: 36px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d8d4cc; border-radius: 6px; background: #fff; color: var(--admin-ink, #21252e); font-size: var(--admin-fs-label); font-weight: 600; cursor: pointer; }
+.admin-pagination-pages button:hover:not(:disabled):not(.active) { background: #f6f3ec; }
+.admin-pagination-pages button.active { background: var(--admin-ink, #21252e); border-color: var(--admin-ink, #21252e); color: #fff; }
+.admin-pagination-pages button:disabled { opacity: .4; cursor: default; }
+.admin-pagination-gap { min-width: 24px; text-align: center; color: var(--admin-muted, #5d584e); }
+@media (max-width: 700px) { .admin-pagination { padding: 12px 14px; } .admin-pagination-pages { margin-left: 0; width: 100%; } .admin-app .admin-list-toolbar .admin-filter-select { margin-left: 0; width: 100%; } }
+
+/* Enquiry "Status" heading: same style as CONTACT / PROJECT TYPE / RECEIVED (the label was left at 8px). */
+.admin-app .lead-actions label { font-size: var(--admin-fs-meta); letter-spacing: .13em; text-transform: uppercase; font-weight: 700; color: #9aa1ab; gap: 8px; }
+.admin-app .lead-actions label select { letter-spacing: normal; text-transform: none; font-weight: 400; }
+
+/* ───── Admin Product Editor: headings, option labels and fieldsets (one scoped block) ───── */
+.admin-app .admin-edit-form { --admin-heading: #21252e; --admin-option: #3f4047; }
+
+/* Headings: field labels, fieldset legends, the image-uploader title and the stock-field labels share one style. */
+.admin-app .admin-edit-form > label,
+.admin-app .admin-edit-form .admin-form-two > label,
+.admin-app .admin-edit-form .admin-form-three > label,
+.admin-app .admin-edit-form .admin-stock-message-field,
+.admin-app .admin-edit-form legend,
+.admin-app .admin-edit-form .image-uploader-label {
+  color: var(--admin-heading);
+  font-size: var(--admin-fs-label);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.admin-app .admin-edit-form legend { padding: 0 6px; }
+
+/* Fieldsets (Merchandising, Real stock, Returns, Payment, Stock message). */
+.admin-app .admin-edit-form .admin-feature-flags,
+.admin-app .admin-edit-form .admin-stock-message { padding: 14px 16px 16px; margin: 2px 0 20px; }
+.admin-app .admin-edit-form .admin-feature-flags { gap: 10px 22px; }
+.admin-app .admin-edit-form .admin-stock-modes { gap: 10px 22px; }
+
+/* Option labels (checkbox text) stay secondary to their heading. */
+.admin-app .admin-edit-form .admin-feature-flags label,
+.admin-app .admin-edit-form .admin-stock-modes label { font-weight: 500; line-height: 1.4; gap: 9px; }
+.admin-app .admin-edit-form .admin-stock-modes label { font-size: 13.5px; color: var(--admin-option); }
+.admin-app .admin-edit-form .admin-feature-flags input[type=checkbox],
+.admin-app .admin-edit-form .admin-stock-modes input[type=checkbox] { flex: 0 0 16px; }
+.admin-app .admin-edit-form .admin-stock-modes input[type=checkbox] { width: 16px; height: 16px; min-height: 16px; }
+
+/* The shared .admin-feature-flags rules (also used by the legal-pages editor) force font-size, colour and the 13px
+   checkbox with !important, so the scoped overrides below need it too. Nothing outside .admin-edit-form is touched. */
+.admin-app .admin-edit-form .admin-feature-flags label { font-size: 13.5px !important; color: var(--admin-option) !important; }
+.admin-app .admin-edit-form .admin-feature-flags input[type=checkbox] { width: 16px !important; height: 16px !important; min-height: 16px !important; }
+/* Size-stock fieldset: its S / M / L / XL / XXL labels are field headings, not options. */
+.admin-app .admin-edit-form .admin-feature-flags.admin-size-stock label { font-size: var(--admin-fs-label) !important; font-weight: 600; letter-spacing: .02em; color: var(--admin-heading) !important; }

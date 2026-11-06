@@ -243,8 +243,9 @@ route('GET', '/admin/orders', async ctx => {
   const status = ctx.url.searchParams.get('status');
   if (status) query = query.eq('status', status);
   const q = (ctx.url.searchParams.get('q') ?? '').replace(/[^\p{L}\p{N} -]/gu, '').trim();
-  if (q) query = query.or(`number.ilike.%${q}%,contact->>name.ilike.%${q}%`);
-  const { data, error, count } = await query.order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  if (q) query = query.or(`number.ilike.%${q}%,contact->>name.ilike.%${q}%,contact->>phone.ilike.%${q}%`);
+  // `id` is a stable tie-breaker so rows never repeat or vanish between pages.
+  const { data, error, count } = await query.order('created_at', { ascending: false }).order('id').range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
   return { items: await presentOrders((data ?? []) as Row[]), total: count ?? 0, page, pageSize };
 });
@@ -271,7 +272,7 @@ const RETURN_SELECT = '*, return_items(order_item_id, quantity), orders(*, order
 route('GET', '/admin/returns', async ctx => {
   await requireAdmin(ctx, 'orders');
   const { page, pageSize } = pageParams(ctx.url, 100);
-  const { data, error, count } = await db().from('returns').select(RETURN_SELECT, { count: 'exact' }).order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  const { data, error, count } = await db().from('returns').select(RETURN_SELECT, { count: 'exact' }).order('created_at', { ascending: false }).order('id').range((page - 1) * pageSize, page * pageSize - 1);
   if (error) {
     if (/does not exist|schema cache/.test(error.message)) return { items: [], total: 0, page, pageSize };
     throw new HttpError(500, 'server_error', 'Something went wrong.');
@@ -309,7 +310,10 @@ const reviewDto = (r: Row) => ({ id: r.id, productId: r.product_id, productName:
 route('GET', '/admin/reviews', async ctx => {
   await requireAdmin(ctx, 'reviews');
   const { page, pageSize } = pageParams(ctx.url, 200);
-  const { data, error, count } = await db().from('reviews').select('*, products(name)', { count: 'exact' }).order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  let query = db().from('reviews').select('*, products(name)', { count: 'exact' });
+  const status = ctx.url.searchParams.get('status');
+  if (status && ['pending', 'published', 'hidden'].includes(status)) query = query.eq('status', status);
+  const { data, error, count } = await query.order('created_at', { ascending: false }).order('id').range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
   return { items: ((data ?? []) as Row[]).map(reviewDto), total: count ?? 0, page, pageSize };
 });
@@ -333,7 +337,12 @@ route('GET', '/admin/leads/export.csv', async ctx => {
 route('GET', '/admin/leads', async ctx => {
   await requireAdmin(ctx, 'leads');
   const { page, pageSize } = pageParams(ctx.url, 200);
-  const { data, error, count } = await db().from('leads').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  let query = db().from('leads').select('*', { count: 'exact' });
+  const status = ctx.url.searchParams.get('status');
+  if (status && ['new', 'contacted', 'qualified', 'closed'].includes(status)) query = query.eq('status', status);
+  const q = (ctx.url.searchParams.get('q') ?? '').replace(/[^\p{L}\p{N} @.-]/gu, '').trim();
+  if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`);
+  const { data, error, count } = await query.order('created_at', { ascending: false }).order('id').range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
   return { items: ((data ?? []) as Row[]).map(leadDto), total: count ?? 0, page, pageSize };
 });

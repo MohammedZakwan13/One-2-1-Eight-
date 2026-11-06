@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownRight, ChevronDown, PackageCheck, Search } from 'lucide-react';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useUi } from '@/components/providers/app-providers';
 import { AdminDataState, titleCase } from '@/components/admin/data-state';
+import { Pagination, useDebounced } from '@/components/admin/pagination';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { OrderReturn, UpdateOrderStatus, UpdateReturn } from '@/lib/api/schemas';
@@ -15,16 +16,23 @@ import { money, slugify } from '@/lib/format';
 const NEXT: Record<string, UpdateOrderStatus['status'][]> = {
   pending_payment: ['cancelled'], confirmed: ['processing', 'cancelled'], processing: ['packed', 'cancelled'], packed: ['shipped', 'cancelled'], shipped: ['delivered'], delivered: ['refunded'],
 };
+const ORDER_STATUSES = ['pending_payment', 'confirmed', 'processing', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded'] as const;
 const RETURN_NEXT: Record<string, string[]> = { requested: ['approved', 'rejected'], approved: ['received'], received: ['refund_pending', 'completed'], refund_pending: ['completed'] };
 
 export function AdminOrders() {
   const { notify } = useUi();
   const confirm = useConfirm();
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ['admin', 'orders'], queryFn: () => api.admin.orders.list() });
-  const orders = query.data?.items ?? [];
-  const returnsQuery = useQuery({ queryKey: ['admin', 'returns'], queryFn: () => api.admin.orders.listReturns() });
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [returnPage, setReturnPage] = useState(1);
+  const q = useDebounced(search.trim());
+  // Search, status filter and paging all run on the server, so any number of orders stays fast and complete.
+  const query = useQuery({ queryKey: ['admin', 'orders', { page, pageSize, q, status: statusFilter }], queryFn: () => api.admin.orders.list({ page, pageSize, q, status: statusFilter }), placeholderData: keepPreviousData });
+  const orders = query.data?.items ?? [];
+  const returnsQuery = useQuery({ queryKey: ['admin', 'returns', { page: returnPage }], queryFn: () => api.admin.orders.listReturns({ page: returnPage, pageSize: 25 }), placeholderData: keepPreviousData });
   const [openId, setOpenId] = useState<string | null>(null);
   const statusMutation = useMutation({
     mutationFn: (input: { id: string; number: string; update: UpdateOrderStatus }) => api.admin.orders.updateStatus(input.id, input.update),
@@ -65,10 +73,10 @@ export function AdminOrders() {
     confirm({ title: `${titleCase(status)} return?`, tone: status === 'rejected' ? 'danger' : 'default', confirmLabel: titleCase(status), message: `Return ${ret.number} for order ${ret.orderNumber}.`, fields: [note], onConfirm: v => applyReturn(ret, { status, note: v.note?.trim() || null }) });
   };
   const returns = returnsQuery.data?.items ?? [];
-  const filtered = orders.filter(order => `${order.number} ${order.contact.name} ${order.contact.phone} ${order.status}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = orders;
   return <AdminDataState isLoading={query.isLoading} error={query.error} retry={() => query.refetch()}>
     <div className="admin-tab-content"><div className="admin-page-heading"><div><span className="eyebrow">SELLING / FULFILMENT</span><h1>Orders <span className="admin-count-chip">{query.data?.total ?? orders.length}</span></h1><p>Review orders and update their fulfilment status. Payment status is set by the payment provider, not here.</p></div><div className="admin-page-actions"><a className="admin-secondary-btn" href={api.admin.orders.exportUrl} download><ArrowDownRight size={15} /> Export</a></div></div>
-    <section className="admin-card admin-orders-full"><div className="admin-list-toolbar"><div className="admin-input-icon"><Search size={16} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search order number, customer or mobile" aria-label="Search orders" /></div><span>{filtered.length} orders</span></div>
+    <section className="admin-card admin-orders-full"><div className="admin-list-toolbar"><div className="admin-input-icon"><Search size={16} /><input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search order number, customer or mobile" aria-label="Search orders" /></div><select className="admin-filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} aria-label="Filter by status"><option value="">All statuses</option>{ORDER_STATUSES.map(status => <option key={status} value={status}>{titleCase(status)}</option>)}</select><span>{query.data?.total ?? 0} orders</span></div>
       <div className="admin-table-wrap"><table className="admin-table admin-table-spacious"><thead><tr><th>ORDER</th><th>CUSTOMER</th><th className="order-col-mobile">MOBILE</th><th>DATE</th><th>ITEMS</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>UPDATE</th><th aria-label="Details" /></tr></thead><tbody>{filtered.map(order => {
         const next = NEXT[order.status] ?? [];
         const open = openId === order.id;
@@ -78,7 +86,7 @@ export function AdminOrders() {
           <td className="order-col-mobile">{order.contact.phone ? `+91 ${order.contact.phone}` : <small>Not recorded</small>}</td>
           <td>{order.createdAt.slice(0, 10)}</td><td>{order.lines.reduce((sum, line) => sum + line.quantity, 0)}</td><td><strong>{money(order.totals.total)}</strong></td><td>{titleCase(order.paymentStatus)}</td>
           <td><span className={`status-pill status-${slugify(order.status)}`}>{titleCase(order.status)}</span></td>
-          <td>{next.length ? <select value={order.status} disabled={statusMutation.isPending} onChange={e => changeStatus(order, e.target.value as UpdateOrderStatus['status'])} aria-label={`Update status for ${order.number}`}>{[order.status, ...next].map(status => <option key={status} value={status}>{titleCase(status)}</option>)}</select> : <small>No further changes</small>}</td>
+          <td>{next.length ? <select className="admin-status-select" value={order.status} disabled={statusMutation.isPending} onChange={e => changeStatus(order, e.target.value as UpdateOrderStatus['status'])} aria-label={`Update status for ${order.number}`}>{[order.status, ...next].map(status => <option key={status} value={status}>{titleCase(status)}</option>)}</select> : <small>No further changes</small>}</td>
           <td><button type="button" className="admin-secondary-btn" aria-expanded={open} onClick={() => setOpenId(open ? null : order.id)}>Details <ChevronDown size={14} /></button></td>
         </tr>,
         open && <tr key={`${order.id}-details`}><td colSpan={10}><div className="order-detail-grid">
@@ -86,8 +94,8 @@ export function AdminOrders() {
           <div><h3>Items</h3><ul>{order.lines.map(line => <li key={`${line.variantId}`}>{line.name} · {line.size} × {line.quantity} · {money(line.lineTotal)}{line.returnable === false ? ' · non-returnable' : ''}{line.exchangeable === false ? ' · non-exchangeable' : ''}{line.returnedQuantity ? ` · ${line.returnedQuantity} in returns` : ''}</li>)}</ul><h3>Payment</h3><p>{order.paymentMethod === 'cod' ? 'Cash on delivery' : order.paymentMethod.toUpperCase()} · {titleCase(order.paymentStatus)}{order.refund ? ` · cancellation refund ${order.refund.status} (${money(order.refund.amount)})` : ''}</p>{order.shipment && <><h3>Shipping</h3><p>{order.shipment.carrier ?? 'Courier not recorded'} · {order.shipment.trackingNumber ?? 'no tracking number'}</p></>}{order.cancelReason && <><h3>Cancellation reason</h3><p>{order.cancelReason}</p></>}</div>
           <div><h3>History</h3><ol>{order.history.map(h => <li key={`${h.status}-${h.at}`}>{titleCase(h.status)} · {h.at.slice(0, 16).replace('T', ' ')}</li>)}</ol></div>
         </div></td></tr>];
-      })}</tbody></table></div>{!filtered.length && <div className="admin-table-empty">No orders match your search.</div>}</section>
-    <section className="admin-card admin-orders-full"><div className="admin-list-toolbar"><h2>Return requests <span className="admin-count-chip">{returns.length}</span></h2></div>
+      })}</tbody></table></div>{!filtered.length && <div className="admin-table-empty">{q || statusFilter ? 'No orders match your search and filters.' : 'No orders yet.'}</div>}<Pagination page={page} pageSize={pageSize} total={query.data?.total ?? 0} onPage={setPage} onPageSize={size => { setPageSize(size); setPage(1); }} noun="orders" busy={query.isFetching} /></section>
+    <section className="admin-card admin-orders-full"><div className="admin-list-toolbar"><h2>Return requests <span className="admin-count-chip">{returnsQuery.data?.total ?? returns.length}</span></h2></div>
       {returns.length === 0 ? <div className="admin-table-empty">No return requests{returnsQuery.isError ? ' (could not load)' : ''}.</div> : <div className="admin-table-wrap"><table className="admin-table admin-table-spacious"><thead><tr><th>RETURN</th><th>ORDER</th><th>CUSTOMER / MOBILE</th><th>ITEMS</th><th>REASON</th><th>STATUS</th><th>REFUND</th><th>ACTIONS</th></tr></thead><tbody>{returns.map(ret => <tr key={ret.id}>
         <td><strong>{ret.number}</strong><br /><small>{ret.createdAt.slice(0, 10)}</small></td><td>{ret.orderNumber}</td>
         <td className="order-customer"><span className="order-field"><em>Name</em><strong>{ret.contact?.name}</strong></span><span className="order-field"><em>Mobile</em><b>{ret.contact?.phone ? `+91 ${ret.contact.phone}` : 'Not recorded'}</b></span></td>
@@ -96,6 +104,7 @@ export function AdminOrders() {
         <td>{ret.refund ? `${money(ret.refund.amount)} · ${titleCase(ret.refund.status)}${ret.refund.reference ? ` (${ret.refund.reference})` : ''}` : '—'}</td>
         <td>{(RETURN_NEXT[ret.status] ?? []).map(status => <button key={status} type="button" className="admin-secondary-btn" onClick={() => decide(ret, status as UpdateReturn['status'])}>{status === 'received' ? 'Received' : titleCase(status)}</button>)}</td>
       </tr>)}</tbody></table></div>}
+      <Pagination page={returnPage} pageSize={25} total={returnsQuery.data?.total ?? 0} onPage={setReturnPage} noun="returns" busy={returnsQuery.isFetching} />
     </section>
     <div className="admin-callout"><PackageCheck size={18} /><p><strong>Order lifecycle:</strong> orders, payments and shipments are owned by the backend. The server only allows valid transitions (e.g. Packed → Shipped); cancelling returns stock. Fulfilment status never marks an order paid. A return only puts stock back after you mark it Received, and a refund is only Completed once you enter its reference.</p></div></div>
   </AdminDataState>;

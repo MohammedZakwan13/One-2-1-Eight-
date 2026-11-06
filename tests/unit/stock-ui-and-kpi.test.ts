@@ -97,7 +97,7 @@ describe('Stock message editor layout (regression for the collapsed input)', () 
     expect(section).toContain("e.target.checked ? 'custom' : 'none'");
     expect(section).toContain("patch('stockMessageNumber'");
     expect(section).toContain('Custom display number (not real inventory)');
-    expect((section.match(/type="number"/g) ?? []).length).toBe(1); // only the custom display number; real quantities are read-only list items
+    expect((section.match(/<NumberInput/g) ?? []).length).toBe(1); // only the custom display number; real quantities are read-only list items
   });
   it('gives the message field full width and a normal height', () => {
     expect(css).toMatch(/\.admin-edit-form input[\s\S]{0,400}width:\s*100%/);

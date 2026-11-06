@@ -10,6 +10,9 @@ import {
 } from '@/lib/api/schemas';
 
 const ADMIN_PAGE = { page: 1, pageSize: 200 };
+/** Server-side paging and filtering for the long admin lists. */
+export type ListParams = { page?: number; pageSize?: number; q?: string; status?: string };
+const paged = (params?: ListParams) => ({ page: params?.page ?? 1, pageSize: params?.pageSize ?? 25, q: params?.q?.trim() || undefined, status: params?.status || undefined });
 
 type UploadResult = z.infer<typeof uploadResponseSchema>;
 
@@ -67,18 +70,18 @@ export const adminRepository = (call: Caller) => ({
     update: (id: string, input: { name: string; image: string; active: boolean }) => call(`/admin/categories/${encodeURIComponent(id)}`, categorySchema, { method: 'PUT', body: input }),
   },
   orders: {
-    list: () => call('/admin/orders', adminOrderListSchema, { query: ADMIN_PAGE }),
+    list: (params?: ListParams) => call('/admin/orders', adminOrderListSchema, { query: paged(params) }),
     updateStatus: (id: string, update: UpdateOrderStatus) => call(`/admin/orders/${encodeURIComponent(id)}/status`, orderSchema, { method: 'PATCH', body: update }),
     exportUrl: '/api/v1/admin/orders/export.csv',
-    listReturns: () => call('/admin/returns', returnListSchema, { query: ADMIN_PAGE }),
+    listReturns: (params?: ListParams) => call('/admin/returns', returnListSchema, { query: paged(params) }),
     updateReturn: (id: string, update: UpdateReturn) => call(`/admin/returns/${encodeURIComponent(id)}`, returnSchema, { method: 'PATCH', body: update }),
   },
   reviews: {
-    list: () => call('/admin/reviews', adminReviewListSchema, { query: ADMIN_PAGE }),
+    list: (params?: ListParams) => call('/admin/reviews', adminReviewListSchema, { query: paged(params) }),
     updateStatus: (id: string, status: 'pending' | 'published' | 'hidden') => call(`/admin/reviews/${encodeURIComponent(id)}`, adminReviewSchema, { method: 'PATCH', body: { status } }),
   },
   leads: {
-    list: () => call('/admin/leads', adminLeadListSchema, { query: ADMIN_PAGE }),
+    list: (params?: ListParams) => call('/admin/leads', adminLeadListSchema, { query: paged(params) }),
     updateStatus: (id: string, status: 'new' | 'contacted' | 'qualified' | 'closed') => call(`/admin/leads/${encodeURIComponent(id)}`, adminLeadSchema, { method: 'PATCH', body: { status } }),
     exportUrl: '/api/v1/admin/leads/export.csv',
   },

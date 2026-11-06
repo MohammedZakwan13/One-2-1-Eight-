@@ -545,6 +545,8 @@ paths:
       parameters:
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: status, in: query, schema: { type: string } }
       responses:
         '200': { description: Orders, content: { application/json: { schema: { $ref: '#/components/schemas/OrderList' } } } }
   /admin/orders/export.csv:
@@ -573,6 +575,9 @@ paths:
       operationId: adminListReturns
       description: Return requests with order contact details. Empty until migration 0005 is applied.
       security: [{ adminSession: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
       responses:
         '200': { description: Returns, content: { application/json: { schema: { type: object, required: [items, total, page, pageSize], properties: { items: { type: array, items: { $ref: '#/components/schemas/Return' } }, total: { type: integer }, page: { type: integer }, pageSize: { type: integer } } } } } }
   /admin/returns/{id}:
@@ -596,6 +601,7 @@ paths:
       parameters:
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, published, hidden] } }
       responses:
         '200': { description: Reviews, content: { application/json: { schema: { $ref: '#/components/schemas/AdminReviewList' } } } }
   /admin/reviews/{id}:
@@ -616,6 +622,8 @@ paths:
       parameters:
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: status, in: query, schema: { type: string, enum: [new, contacted, qualified, closed] } }
       responses:
         '200': { description: Leads, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLeadList' } } } }
   /admin/leads/export.csv:
