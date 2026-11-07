@@ -1599,6 +1599,26 @@ button {
   border-bottom: 1px solid #5b5d55
 }
 
+.footer-email-note {
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid #363831;
+  font-size: 9px;
+  line-height: 1.7;
+  letter-spacing: .03em;
+  color: #85867e
+}
+
+.footer-email-note a {
+  color: #acaca4;
+  text-decoration: underline;
+  text-underline-offset: 2px
+}
+
+.footer-email-note a:hover {
+  color: #e7e7df
+}
+
 .footer-bottom {
   display: flex;
   align-items: center;
@@ -4534,6 +4554,46 @@ button {
   font-size: 9px;
   color: #77786f;
   line-height: 1.7
+}
+
+.order-contact {
+  max-width: 530px;
+  margin: 18px auto 20px;
+  padding: 18px 16px;
+  background: #eeece5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  text-align: left
+}
+
+.order-contact svg {
+  color: var(--accent);
+  flex-shrink: 0
+}
+
+.order-contact>div {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px
+}
+
+.order-contact strong {
+  font-size: 12px
+}
+
+.order-contact span {
+  font-size: 10px;
+  color: #77786f;
+  line-height: 1.7
+}
+
+.order-contact-button {
+  flex: 1 1 100%;
+  justify-content: center;
+  text-align: center
 }
 
 .confirmation-actions {

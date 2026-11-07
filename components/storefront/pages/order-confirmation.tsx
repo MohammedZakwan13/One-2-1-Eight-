@@ -57,9 +57,9 @@ export function OrderConfirmation({ orderId, token }: { orderId: string; token: 
           ? `Thanks, ${firstName}. We haven't received confirmation from your payment provider yet. This page updates automatically.`
           : `This order is ${order.status.replace(/_/g, ' ')}.`}</p>
     <div className="confirmation-receipt"><div><span>ORDER NUMBER</span><strong>{order.number}</strong></div><div><span>ORDER TOTAL</span><strong>{money(order.totals.total)}</strong></div><div><span>PAYMENT</span><strong>{METHOD_LABEL[order.paymentMethod]} · {PAYMENT_LABEL[order.paymentStatus]}</strong></div></div>
-    <div className="confirmation-next"><PackageCheck size={20} /><div><strong>{placed ? "You're all set." : 'Need a hand?'}</strong><span>Questions about this order? Write to {settings.contactEmail} and quote order {order.number}.</span></div></div>
+    <div className="confirmation-next"><PackageCheck size={20} /><div><strong>{placed ? "You're all set." : 'Need a hand?'}</strong><span>We'll email you automatically each time your order status changes.</span></div></div>
 
-    <OrderActions order={order} token={token} />
+    <OrderActions order={order} token={token} contactEmail={settings.contactEmail} />
     <div className="confirmation-actions">{failed || awaiting ? <RouteLink href="/bag" className="button button-dark" onClick={onTransition}>BACK TO YOUR BAG <ArrowRight size={16} /></RouteLink> : <RouteLink href="/collections/new-arrivals" className="button button-dark" onClick={onTransition}>KEEP EXPLORING <ArrowRight size={16} /></RouteLink>}<RouteLink href="/" className="button button-outline" onClick={onTransition}>BACK HOME</RouteLink></div>
   </main><Footer /></>;
 }

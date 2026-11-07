@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseTrackingUrl } from '@/lib/tracking-url';
 import { stockTextError } from '@/lib/inventory';
 
 /**
@@ -479,7 +480,7 @@ export const updateOrderStatusSchema = z.object({
   note: z.string().trim().max(500).nullish(),
   carrier: z.string().trim().max(80).nullish(),
   trackingNumber: z.string().trim().max(80).nullish(),
-  trackingUrl: z.string().trim().url().startsWith('https://').max(500).nullish(),
+  trackingUrl: z.string().trim().url().startsWith('https://').max(500).refine(value => parseTrackingUrl(value).ok, 'Enter a valid https:// tracking link.').nullish(),
 });
 
 export type UpdateOrderStatus = z.infer<typeof updateOrderStatusSchema>;

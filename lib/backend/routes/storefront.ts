@@ -14,6 +14,7 @@ import {
 } from '@/lib/backend/data';
 import { isCancellable, presentOrders, trackingUrl } from '@/lib/backend/returns';
 import { checkOtpRequest, logOtp, noteRateLimit, noteValidationFailure, requireSameMobile } from '@/lib/backend/otp';
+import { shouldSendConfirmation } from '@/lib/backend/email/policy';
 import { createRazorpayOrder, sendLeadEmails, sendOrderEmail, verifyOtpAccessToken, sendReturnEmail, verifyRazorpayPayment } from '@/lib/backend/integrations';
 import { getServerEnv } from '@/lib/env';
 
@@ -409,9 +410,12 @@ route('POST', '/payments/:id/verify', async ctx => {
   }
   const { data: settled, error } = await db().rpc('settle_payment', { p_order: payment.order_id, p_provider_payment: rzpPayment, p_success: true });
   if (error) { console.error('[backend] settle_payment', error.message); throw new HttpError(500, 'server_error', 'Something went wrong.'); }
-  if ((settled as Row).changed) {
+  if (shouldSendConfirmation(settled)) {
     const row = await loadOrder(payment.order_id);
     if (row) await sendOrderEmail(orderMailData(toOrder(row)), 'confirmation');
+  } else if ((settled as Row).needs_refund) {
+    // Money arrived for an order that was already cancelled: no "order received" email. The refund is handled manually.
+    console.error('[payment] captured after cancel: refund needed', { order: payment.order_id });
   }
   return { id: payment.id, provider: payment.provider, status: (settled as Row).payment_status, action: null };
 });

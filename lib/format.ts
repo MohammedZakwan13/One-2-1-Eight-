@@ -6,6 +6,24 @@ export const slugify = (text: string) =>
 /** Splits plain-text CMS copy into paragraphs. Content is rendered as text nodes only (never as HTML). */
 export const toParagraphs = (text: string) => text.split(/\n{2,}/).map(part => part.trim()).filter(Boolean);
 
+export type TextSegment = { text: string; href?: string };
+const LINK_PATTERN = /https:\/\/[^\s<>"]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+
+/** Splits plain CMS text into text and link segments. Only https:// URLs and email addresses become links (mailto: for emails); trailing punctuation stays text. No HTML or Markdown is interpreted. */
+export function linkifyText(text: string): TextSegment[] {
+  const out: TextSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(LINK_PATTERN)) {
+    const value = match[0].replace(/[.,;:!?)\]]+$/, '');
+    const start = match.index ?? 0;
+    if (start > last) out.push({ text: text.slice(last, start) });
+    out.push({ text: value, href: value.startsWith('https://') ? value : `mailto:${value}` });
+    last = start + value.length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}
+
 /**
  * Normalises an email address for mailto: links.
  * Returns null when missing, blank or not containing an @ symbol.
@@ -15,6 +33,15 @@ export function formatEmailUrl(email: string | null | undefined): string | null 
   const trimmed = email.trim();
   if (!trimmed || !trimmed.includes('@')) return null;
   return `mailto:${trimmed}`;
+}
+
+/** `mailto:` link for "Contact us about this order": the order number is in the subject and the first lines of the body. Null when no contact email is configured. */
+export function orderContactMailto(contactEmail: string | null | undefined, orderNumber: string): string | null {
+  const base = formatEmailUrl(contactEmail);
+  if (!base) return null;
+  const subject = `Order ${orderNumber}`;
+  const body = ['Hi ONE 2 1 EIGHT team,', '', `I need help with order ${orderNumber}.`, '', ''].join('\n');
+  return `${base}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 /**

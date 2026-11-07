@@ -11,6 +11,7 @@ import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { OrderReturn, UpdateOrderStatus, UpdateReturn } from '@/lib/api/schemas';
 import { money, slugify } from '@/lib/format';
+import { parseTrackingUrl, TRACKING_URL_MAX } from '@/lib/tracking-url';
 
 /** Mirrors transition_order in the database; only a UI hint, the server enforces it. */
 const NEXT: Record<string, UpdateOrderStatus['status'][]> = {
@@ -49,8 +50,12 @@ export function AdminOrders() {
       confirm({
         title: 'Mark order as shipped?', tone: 'default', confirmLabel: 'Mark as shipped',
         message: `Add the courier details for order ${order.number} (optional). Customers see them in their shipping email.`,
-        fields: [{ name: 'carrier', label: 'Courier name', maxLength: 80 }, { name: 'trackingNumber', label: 'Tracking number', maxLength: 80 }],
-        onConfirm: values => apply(order, { status, carrier: values.carrier?.trim() || null, trackingNumber: values.trackingNumber?.trim() || null }),
+        fields: [{ name: 'carrier', label: 'Courier name', maxLength: 80 }, { name: 'trackingNumber', label: 'Tracking number', maxLength: 80 }, { name: 'trackingUrl', label: 'Tracking link (optional, https://…)', maxLength: TRACKING_URL_MAX, type: 'url', placeholder: 'https://courier.example/track/123', validate: value => { const parsed = parseTrackingUrl(value); return parsed.ok ? null : parsed.error; } }],
+        onConfirm: values => {
+          const link = parseTrackingUrl(values.trackingUrl);
+          if (!link.ok) throw new Error(link.error);
+          return apply(order, { status, carrier: values.carrier?.trim() || null, trackingNumber: values.trackingNumber?.trim() || null, trackingUrl: link.url });
+        },
       });
     } else if (status === 'cancelled') {
       confirm({ title: 'Cancel order?', message: `Are you sure you want to cancel order ${order.number}? Reserved stock is returned to inventory. This action cannot be undone.`, confirmLabel: 'Cancel order', onConfirm: () => apply(order, { status }) });

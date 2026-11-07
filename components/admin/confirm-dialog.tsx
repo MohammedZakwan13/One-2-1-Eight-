@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { errorMessage } from '@/lib/api/errors';
 
-export type ConfirmField = { name: string; label: string; placeholder?: string; maxLength?: number };
+export type ConfirmField = { name: string; label: string; placeholder?: string; maxLength?: number; type?: 'text' | 'url'; /** Returns an error message to block confirming, or null when the value is fine. */ validate?: (value: string) => string | null };
 export type ConfirmOptions = {
   title: string;
   message: React.ReactNode;
@@ -70,6 +70,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const confirm = async () => {
     if (!options || submitting.current) return;
+    for (const field of options.fields ?? []) {
+      const problem = field.validate?.(values[field.name] ?? '') ?? null;
+      if (problem) { setError(problem); return; }
+    }
     submitting.current = true; setBusy(true); setError('');
     try {
       await options.onConfirm(values);
@@ -88,7 +92,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       <div ref={dialog} className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId}>
         <h2 id={titleId}>{options.title}</h2>
         <p id={messageId}>{options.message}</p>
-        {options.fields?.map(field => <label key={field.name}>{field.label}<input value={values[field.name] ?? ''} maxLength={field.maxLength ?? 120} placeholder={field.placeholder} disabled={busy} onChange={event => setValues(current => ({ ...current, [field.name]: event.target.value }))} /></label>)}
+        {options.fields?.map(field => <label key={field.name}>{field.label}<input type={field.type === 'url' ? 'url' : 'text'} inputMode={field.type === 'url' ? 'url' : undefined} autoComplete="off" value={values[field.name] ?? ''} maxLength={field.maxLength ?? 120} placeholder={field.placeholder} disabled={busy} onChange={event => setValues(current => ({ ...current, [field.name]: event.target.value }))} /></label>)}
         {error && <p className="form-error-banner" role="alert">{error}</p>}
         <div className="confirm-actions">
           <button ref={cancelButton} type="button" className="admin-secondary-btn" onClick={close} disabled={busy}>Cancel</button>

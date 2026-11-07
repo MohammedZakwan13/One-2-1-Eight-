@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   const { verifyRazorpayWebhook, sendOrderEmail } = await import('@/lib/backend/integrations');
   const { db } = await import('@/lib/backend/core');
   const { loadOrder, orderMailData, toOrder } = await import('@/lib/backend/data');
+  const { shouldSendConfirmation } = await import('@/lib/backend/email/policy');
 
   const raw = await request.text();
   if (!verifyRazorpayWebhook(raw, request.headers.get('x-razorpay-signature') ?? '')) return reply(401, { error: 'invalid_signature' });
@@ -41,9 +42,12 @@ export async function POST(request: Request) {
     if (eventId) await db().from('webhook_events').delete().eq('provider', 'razorpay').eq('event_id', eventId);
     return reply(500, { error: 'settle_failed' });
   }
-  if ((settled as { changed?: boolean }).changed) {
+  if (shouldSendConfirmation(settled)) {
     const row = await loadOrder(payment.order_id);
     if (row) await sendOrderEmail(orderMailData(toOrder(row)), 'confirmation');
+  } else if ((settled as { needs_refund?: boolean } | null)?.needs_refund) {
+    // Money arrived for an order that was already cancelled: no "order received" email. The refund is handled manually.
+    console.error('[webhook:razorpay] captured after cancel: refund needed', { order: payment.order_id });
   }
   return reply(200, { status: 'ok' });
 }

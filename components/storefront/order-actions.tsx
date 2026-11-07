@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { Mail } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { Order } from '@/lib/api/schemas';
-import { money } from '@/lib/format';
+import { money, orderContactMailto } from '@/lib/format';
 
 const label = (value: string) => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
 const RETURN_STEP: Record<string, string> = {
@@ -13,8 +14,8 @@ const RETURN_STEP: Record<string, string> = {
   received: 'We have your item and are inspecting it.', refund_pending: 'Your refund is being processed. It is not complete yet.', completed: 'Refund completed.',
 };
 
-/** Tracking timeline, cancellation and returns for one order. Every rule shown here is decided and enforced by the server. */
-export function OrderActions({ order, token }: { order: Order; token: string }) {
+/** Contact action, cancellation and returns for one order. Every rule shown here is decided and enforced by the server. */
+export function OrderActions({ order, token, contactEmail }: { order: Order; token: string; contactEmail: string }) {
   const client = useQueryClient();
   const [panel, setPanel] = useState<'cancel' | 'return' | null>(null);
   const [reason, setReason] = useState('');
@@ -37,10 +38,13 @@ export function OrderActions({ order, token }: { order: Order; token: string }) 
   const picked = Object.entries(quantities).filter(([, qty]) => qty > 0).map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
   const nonReturnable = order.lines.filter(line => line.returnable === false);
 
-  return <section className="order-actions" aria-label="Order tracking and actions">
-    <h2>Tracking</h2>
-    <ol className="order-timeline">{order.history.map(step => <li key={`${step.status}-${step.at}`}><strong>{label(step.status)}</strong><span>{step.at.slice(0, 16).replace('T', ' ')}</span></li>)}</ol>
-    {order.shipment && <p>Shipped with <strong>{order.shipment.carrier ?? 'our courier'}</strong>{order.shipment.trackingNumber ? <> · tracking <strong>{order.shipment.trackingNumber}</strong></> : null}{order.shipment.trackingUrl && /^https?:\/\//.test(order.shipment.trackingUrl) ? <> · <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer">Track with carrier</a></> : null}. Courier updates are on the carrier's site; we do not show live scans.</p>}
+  const mailto = orderContactMailto(contactEmail, order.number);
+  return <section className="order-actions" aria-label="Order actions">
+    <div className="order-contact">
+      <Mail size={20} aria-hidden="true" />
+      <div><strong>Need help with this order?</strong><span>Automatic order status updates will arrive by email, so there is nothing to track here.{mailto ? '' : ` Write to ${contactEmail || 'our team'} and quote order ${order.number}.`}</span></div>
+      {mailto && <a className="button button-dark order-contact-button" href={mailto}>CONTACT US ABOUT THIS ORDER</a>}
+    </div>
     {order.status === 'cancelled' && <p role="status">This order was cancelled{order.cancelReason ? `: ${order.cancelReason}` : ''}.{order.refund ? ` Refund ${order.refund.status === 'completed' ? 'completed' : 'pending'} (${money(order.refund.amount)}).` : order.paymentMethod === 'cod' ? ' No payment was collected, so nothing needs refunding.' : ''}</p>}
     {notice && <p role="status" className="order-notice">{notice}</p>}
     {error && <p role="alert" className="form-error-banner">{error}</p>}

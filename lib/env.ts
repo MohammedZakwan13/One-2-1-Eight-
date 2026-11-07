@@ -28,7 +28,7 @@ const rawSchema = z.object({
   SUPABASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
   SUPABASE_ANON_KEY: optionalString,
-  /** `resend` (default, real delivery) or `mailpit` (local SMTP capture; rejected in production). */
+  /** `resend` (default, the only external provider) or `mailpit` (local SMTP capture; rejected in production). */
   EMAIL_PROVIDER: z.preprocess(emptyToUndefined, z.enum(['resend', 'mailpit']).default('resend')),
   SMTP_HOST: z.preprocess(emptyToUndefined, z.string().default('localhost')),
   SMTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).default(1025)),
@@ -36,6 +36,10 @@ const rawSchema = z.object({
   EMAIL_FROM: optionalString,
   INTERNAL_NOTIFICATION_EMAIL: z.preprocess(emptyToUndefined, z.string().email().optional()),
   RESEND_WEBHOOK_SECRET: optionalString,
+  /** Optional Reply-To for customer emails. */
+  EMAIL_REPLY_TO: z.preprocess(emptyToUndefined, z.string().email().optional()),
+  /** Shared secret for POST /api/internal/email-retry (called by the VPS cron job). Min 24 characters. */
+  EMAIL_RETRY_SECRET: z.preprocess(emptyToUndefined, z.string().min(24).optional()),
   RAZORPAY_KEY_ID: optionalString,
   RAZORPAY_KEY_SECRET: optionalString,
   RAZORPAY_WEBHOOK_SECRET: optionalString,
@@ -68,6 +72,12 @@ export type ServerEnv = {
   apiDocsEnabled: boolean;
   supabase: { url: string; serviceRoleKey: string; anonKey: string } | null;
   resend: { apiKey: string; from: string; internalEmail: string | null; webhookSecret: string | null } | null;
+  /** Which provider is selected. */
+  emailProvider: 'resend' | 'mailpit';
+  emailReplyTo: string | null;
+  emailRetrySecret: string | null;
+  /** INTERNAL_NOTIFICATION_EMAIL regardless of provider (admin alerts). */
+  internalNotificationEmail: string | null;
   /** Local-only SMTP capture (Mailpit). Null unless EMAIL_PROVIDER=mailpit outside production. */
   mailpit: { host: string; port: number; from: string; internalEmail: string | null } | null;
   razorpay: { keyId: string; keySecret: string; webhookSecret: string | null } | null;
@@ -141,7 +151,11 @@ export function parseServerEnv(source: Record<string, string | undefined>): Serv
     apiDocsEnabled: env.ENABLE_API_DOCS ? env.ENABLE_API_DOCS === 'true' : !isProduction,
     supabase,
     mailpit: env.EMAIL_PROVIDER === 'mailpit' ? { host: env.SMTP_HOST, port: env.SMTP_PORT, from: env.EMAIL_FROM ?? 'ONE 2 1 EIGHT <orders@one2oneight.local>', internalEmail: env.INTERNAL_NOTIFICATION_EMAIL ?? null } : null,
-    resend: env.EMAIL_PROVIDER === 'resend' && env.RESEND_API_KEY && env.EMAIL_FROM ? { apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM, internalEmail: env.INTERNAL_NOTIFICATION_EMAIL ?? null, webhookSecret: env.RESEND_WEBHOOK_SECRET ?? null } : null,
+    emailProvider: env.EMAIL_PROVIDER,
+    emailReplyTo: env.EMAIL_REPLY_TO ?? null,
+    emailRetrySecret: env.EMAIL_RETRY_SECRET ?? null,
+    internalNotificationEmail: env.INTERNAL_NOTIFICATION_EMAIL ?? null,
+    resend: env.EMAIL_PROVIDER !== 'mailpit' && env.RESEND_API_KEY && env.EMAIL_FROM ? { apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM, internalEmail: env.INTERNAL_NOTIFICATION_EMAIL ?? null, webhookSecret: env.RESEND_WEBHOOK_SECRET ?? null } : null,
     razorpay: env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET ? { keyId: env.RAZORPAY_KEY_ID, keySecret: env.RAZORPAY_KEY_SECRET, webhookSecret: env.RAZORPAY_WEBHOOK_SECRET ?? null } : null,
     trustedProxy: env.TRUSTED_PROXY === 'cloudflare' ? { mode: 'cloudflare', secret: env.TRUSTED_PROXY_SECRET ?? null } : env.TRUSTED_PROXY === 'vercel' ? { mode: 'vercel', onVercel: env.VERCEL === '1' } : { mode: 'none' },
     msg91: env.MSG91_AUTH_KEY && env.MSG91_WIDGET_ID && env.MSG91_WIDGET_TOKEN_AUTH ? { authKey: env.MSG91_AUTH_KEY, widgetId: env.MSG91_WIDGET_ID, tokenAuth: env.MSG91_WIDGET_TOKEN_AUTH } : null,
