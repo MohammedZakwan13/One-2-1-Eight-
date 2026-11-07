@@ -84,63 +84,129 @@ jobs:
           set -Eeuo pipefail
           cd /var/www/one2oneight
 
-          OLD_IMAGE=$(docker inspect one21eight-web:production --format='{{.Id}}' 2>/dev/null || true)
-          OLD_SHA=$(git rev-parse HEAD 2>/dev/null || true)
-          DEPLOY_OK=0
+          # The script itself arrives on stdin, so no command below may read stdin.
+          dk() { docker "$@" </dev/null; }
+          dc() { docker compose -f docker-compose.prod.yml "$@" </dev/null; }
+          g() { git "$@" </dev/null; }
 
-          rollback() {
-            # Best effort. Never exits the script, so it cannot hide the original failure.
-            if [ -z "$OLD_IMAGE" ]; then
-              echo "ROLLBACK SKIPPED: no previous image was found. Manual intervention required." >&2
-              return 1
-            fi
-            echo "Rolling back to previous image ${OLD_IMAGE}..." >&2
-            if [ -n "$OLD_SHA" ]; then
-              git reset --hard "$OLD_SHA" || echo "Warning: could not restore previous checkout ${OLD_SHA}." >&2
-            fi
-            docker tag "$OLD_IMAGE" one21eight-web:production || return 1
-            docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate || return 1
-            for j in $(seq 1 12); do
-              if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
-                echo "Rollback complete: previous version is healthy." >&2
-                return 0
-              fi
+          PROD_TAG=one21eight-web:production
+          ROLLBACK_TAG=one21eight-web:rollback
+          PHASE=preflight     # preflight -> build -> recreate -> done
+          DEPLOY_OK=0
+          OLD_SHA=""
+          ROLLBACK_IMAGE=""
+
+          healthy() { curl -fsS --max-time 5 http://127.0.0.1:3000/api/health >/dev/null; }
+
+          wait_healthy() {
+            local tries=$1 n
+            for n in $(seq 1 "$tries"); do
+              if healthy; then return 0; fi
               sleep 5
             done
+            return 1
+          }
+
+          # Best effort and never aborts the script, so it cannot hide the original failure. Only ever prints names, tags and SHAs.
+          restore_checkout() {
+            if [ -n "$OLD_SHA" ]; then
+              g reset --hard "$OLD_SHA" >/dev/null || echo "Warning: could not restore checkout ${OLD_SHA}." >&2
+            fi
+          }
+
+          restore_production_tag() {
+            if [ -n "$ROLLBACK_IMAGE" ]; then
+              dk tag "$ROLLBACK_IMAGE" "$PROD_TAG" || { echo "Warning: could not restore ${PROD_TAG}." >&2; return 1; }
+            fi
+          }
+
+          rollback_container() {
+            echo "Recreating the previous container from ${ROLLBACK_IMAGE}..." >&2
+            restore_production_tag || return 1
+            dc up -d --no-build --force-recreate || return 1
+            if wait_healthy 12; then
+              echo "Rollback complete: previous version is healthy." >&2
+              return 0
+            fi
             echo "Rollback finished but the previous version did not pass its health check." >&2
             return 1
           }
 
           # Runs on ANY exit (command failure under set -e, or an explicit exit 1 after a failed health check).
           on_exit() {
-            status=$?
+            local status=$?
             trap - EXIT
             if [ "$DEPLOY_OK" != "1" ]; then
               [ "$status" -ne 0 ] || status=1
-              echo "Deployment FAILED (exit code ${status})." >&2
-              if ! rollback; then
-                echo "ROLLBACK FAILED. The site may be down: check the VPS immediately." >&2
-              fi
+              echo "Deployment FAILED during '${PHASE}' (exit code ${status})." >&2
+              case "$PHASE" in
+                preflight)
+                  echo "Nothing was changed: the running site, the checkout and the image tags are untouched." >&2
+                  ;;
+                build)
+                  # The running container was never touched. Put the checkout and the production tag back.
+                  restore_checkout
+                  restore_production_tag || true
+                  if healthy; then echo "The running site is untouched and healthy." >&2
+                  else echo "WARNING: the running site did not answer its health check. Check the VPS immediately." >&2; fi
+                  ;;
+                recreate)
+                  restore_checkout
+                  if ! rollback_container; then
+                    echo "ROLLBACK FAILED. The site may be down: check the VPS immediately." >&2
+                  fi
+                  ;;
+              esac
             fi
             exit "$status"
           }
           trap on_exit EXIT
 
-          git fetch origin feature/supabase-api
-          git reset --hard "$GITHUB_SHA"
+          # ---------- PREFLIGHT: nothing is changed unless every check passes ----------
 
-          docker compose -f docker-compose.prod.yml build web
-          docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate
+          # Compose file valid and .env.production readable by this user (prints nothing).
+          dc config -q
 
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
-              echo "Production deployment healthy."
-              DEPLOY_OK=1
-              exit 0
-            fi
+          g fetch origin feature/supabase-api
+          g cat-file -e "${GITHUB_SHA}^{commit}"
+          OLD_SHA=$(g rev-parse HEAD)
 
-            sleep 5
-          done
+          # The image the RUNNING container actually uses (image ID only; never the container's environment).
+          RUNNING_ID=$(dc ps -q web | head -n 1)
+          RUNNING_IMAGE=""
+          if [ -n "$RUNNING_ID" ]; then
+            RUNNING_IMAGE=$(dk inspect --format '{{.Image}}' "$RUNNING_ID" 2>/dev/null || true)
+          fi
+
+          if [ -n "$RUNNING_IMAGE" ] && dk image inspect --format '{{.Id}}' "$RUNNING_IMAGE" >/dev/null 2>&1; then
+            ROLLBACK_IMAGE=$(dk image inspect --format '{{.Id}}' "$RUNNING_IMAGE")
+            echo "Rollback image: the currently running image (${ROLLBACK_IMAGE})."
+          elif dk image inspect --format '{{.Id}}' "$ROLLBACK_TAG" >/dev/null 2>&1; then
+            ROLLBACK_IMAGE=$(dk image inspect --format '{{.Id}}' "$ROLLBACK_TAG")
+            echo "The running image is not in Docker's inventory; using the prebuilt ${ROLLBACK_TAG} (${ROLLBACK_IMAGE})."
+          else
+            echo "ABORT: no valid rollback image (the running image is unavailable and ${ROLLBACK_TAG} does not exist). Nothing was changed." >&2
+            exit 1
+          fi
+
+          # Keep the old image under the rollback tag before anything is built, so building can never orphan it.
+          dk tag "$ROLLBACK_IMAGE" "$ROLLBACK_TAG"
+
+          # ---------- BUILD: the running container is not touched ----------
+          PHASE=build
+          g reset --hard "$GITHUB_SHA"
+          dc build web
+
+          # ---------- RECREATE ----------
+          PHASE=recreate
+          dc up -d --no-build --force-recreate
+
+          if wait_healthy 30; then
+            echo "Production deployment healthy."
+            PHASE=done
+            DEPLOY_OK=1
+            exit 0
+          fi
 
           echo "Health check failed."
           exit 1
