@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { effectiveStockMode, stockLine } from '@/lib/inventory';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCircle2, Heart, MapPin, Minus, Plus, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Heart, MapPin, Minus, Plus, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
 import { SmartImage } from '@/components/ui/smart-image';
 import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
@@ -20,6 +20,8 @@ import { api } from '@/lib/api/client';
 import { errorMessage, isUnauthorized } from '@/lib/api/errors';
 import type { Product, ReviewList } from '@/lib/api/schemas';
 import { discountPercent, variantForSize } from '@/lib/catalog';
+import { formatGalleryCounter } from '@/lib/gallery-nav';
+import { useProductGallery } from '@/lib/hooks/use-product-gallery';
 
 const EMPTY_REVIEWS: ReviewList = { summary: { average: 0, count: 0, distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 } }, items: [] };
 
@@ -32,7 +34,6 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
   const queryClient = useQueryClient();
   const reviewsQuery = useQuery({ queryKey: ['reviews', product.slug], queryFn: ({ signal }) => api.reviews.list(product.slug, signal), initialData: initialReviews ?? EMPTY_REVIEWS, initialDataUpdatedAt: initialReviews ? Date.now() : 0, staleTime: 30_000 });
   const summary = reviewsQuery.data.summary;
-  const [activeImage, setActiveImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState('');
   const [sizeGuide, setSizeGuide] = useState(false);
   const [deliveryPin, setDeliveryPin] = useState('');
@@ -122,24 +123,31 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
   };
   const galleryImages = (product.images || []).filter(Boolean);
   const hasMultipleImages = galleryImages.length > 1;
-  const currentImage = galleryImages[activeImage % Math.max(1, galleryImages.length)] || '';
+  // ONE source of truth for the selected image: the thumbnails, the arrows, a swipe, the arrow keys, the dots and the counter all use it.
+  // It belongs to this product, so opening another product starts again at the first image.
+  const gallery = useProductGallery(product.id, galleryImages.length);
+  const activeImage = gallery.index;
+  const counter = formatGalleryCounter(activeImage, galleryImages.length);
+  const currentImage = galleryImages[activeImage] || '';
   return <><main className="product-page">
     <div className="breadcrumbs product-breadcrumbs"><RouteLink href="/" onClick={onTransition}>Home</RouteLink><span>/</span><RouteLink href={`/collections/${slugify(product.category)}`} onClick={onTransition}>{product.category}</RouteLink><span>/</span><span>{product.name}</span></div>
     <div className="product-layout">
-      <section className={`product-gallery ${hasMultipleImages ? 'has-thumbnails' : 'single-image'}`} aria-label="Product images">
-        <div className="gallery-main">
+      <section className={`product-gallery ${hasMultipleImages ? 'has-thumbnails' : 'single-image'}`} aria-label="Product images" {...gallery.sectionProps}>
+        <div className="gallery-main" {...gallery.mainProps}>
           <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager />
-          {hasMultipleImages && <span className="gallery-image-number">0{activeImage + 1} <i>/</i> 0{galleryImages.length}</span>}
+          {hasMultipleImages && <span className="gallery-image-number" aria-live="polite">{counter.current} <i>/</i> {counter.total}</span>}
           <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={20} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+          {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-prev" onClick={() => gallery.go(-1)} aria-label="Previous product image"><ChevronLeft size={18} aria-hidden="true" /></button>}
+          {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-next" onClick={() => gallery.go(1)} aria-label="Next product image"><ChevronRight size={18} aria-hidden="true" /></button>}
         </div>
         {hasMultipleImages && (
           <div className="gallery-thumbnails">
-            {galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => setActiveImage(index)} aria-label={`View product image ${index + 1}`}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}
+            {galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => gallery.select(index)} aria-label={`View product image ${index + 1}`} aria-current={activeImage === index ? 'true' : undefined}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}
           </div>
         )}
         {hasMultipleImages && (
           <div className="gallery-mobile-dots">
-            {galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} onClick={() => setActiveImage(idx)} />)}
+            {galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} aria-current={activeImage === idx ? 'true' : undefined} onClick={() => gallery.select(idx)} />)}
           </div>
         )}
       </section>

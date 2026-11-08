@@ -12965,3 +12965,74 @@ button {
     transition: none;
   }
 }
+
+/* ───────────── Product gallery: previous / next arrows (the thumbnails, counter and layout are unchanged) ───────────── */
+/* Vertical page scrolling stays with the browser; only sideways finger movement reaches the swipe handler. */
+.gallery-main {
+  touch-action: pan-y;
+}
+
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+  padding: 0;
+  border: 1px solid rgba(22, 23, 21, .14);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .84);
+  color: var(--ink, #161715);
+  box-shadow: 0 2px 10px rgba(22, 23, 21, .12);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.gallery-arrow-prev {
+  left: 10px;
+}
+
+.gallery-arrow-next {
+  right: 10px;
+}
+
+.gallery-arrow:hover {
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(22, 23, 21, .18);
+}
+
+.gallery-arrow:focus-visible {
+  outline: 2px solid var(--ink, #161715);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/* With a mouse the arrows are quiet until the image is hovered or a control inside has focus; touch screens show them fully and a bit larger. */
+@media (hover: hover) and (pointer: fine) {
+  .gallery-arrow {
+    opacity: .55;
+  }
+
+  .gallery-main:hover .gallery-arrow,
+  .product-gallery:focus-within .gallery-arrow {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .gallery-arrow {
+    width: 40px;
+    height: 40px;
+    margin-top: -20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-arrow {
+    transition: none;
+  }
+}
