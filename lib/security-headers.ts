@@ -27,6 +27,8 @@ export function buildCsp(env: Record<string, string | undefined>, isDev: boolean
     `script-src ${scriptSrc.join(' ')}`,
     `style-src 'self' 'unsafe-inline' ${msg91 ? hcaptcha.join(' ') : ''}`.trim(),
     `img-src ${imgSrc.join(' ')}`,
+    // Hero banner videos are served from Supabase Storage (another origin), so `default-src 'self'` would block them. https only, like img-src.
+    "media-src 'self' blob: https:",
     "font-src 'self' data:",
     `connect-src ${connectSrc.join(' ')}`,
     frameSrc.length ? `frame-src ${frameSrc.join(' ')}` : "frame-src 'none'",

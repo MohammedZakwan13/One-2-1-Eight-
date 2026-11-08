@@ -5,8 +5,8 @@ import {
   adminCategoriesSchema, adminContentSchema, adminLeadListSchema, adminLeadSchema, adminLoginResponseSchema, adminMeSchema,
   adminOrderListSchema, adminPageListSchema, adminPageSchema, adminProductListSchema, adminProductSchema, adminReviewListSchema, adminReviewSchema,
   apiErrorBodySchema, dashboardSummarySchema, heroSlideSchema, orderSchema, storeSettingsSchema, categorySchema, uploadResponseSchema,
-  type AdminProductInput, type StoreSettings, type HeroSlide, type UpdateOrderStatus,
-  returnListSchema, returnSchema, type UpdateReturn,
+  type AdminProductInput, type StoreSettings, type UpdateOrderStatus,
+  returnListSchema, returnSchema, type UpdateReturn, heroVideoUploadResponseSchema, adminHeroOrderResultSchema, type HeroSlideInput,
 } from '@/lib/api/schemas';
 
 const ADMIN_PAGE = { page: 1, pageSize: 200 };
@@ -14,14 +14,17 @@ const ADMIN_PAGE = { page: 1, pageSize: 200 };
 export type ListParams = { page?: number; pageSize?: number; q?: string; status?: string };
 const paged = (params?: ListParams) => ({ page: params?.page ?? 1, pageSize: params?.pageSize ?? 25, q: params?.q?.trim() || undefined, status: params?.status || undefined });
 
-type UploadResult = z.infer<typeof uploadResponseSchema>;
+type VideoUploadResult = z.infer<typeof heroVideoUploadResponseSchema>;
 
 /** Multipart upload via XHR so the UI can show real progress. CSRF token is fetched from the same-origin API. */
-async function uploadImage(file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<UploadResult> {
+const uploadImage = (file: File, onProgress?: (percent: number) => void, signal?: AbortSignal) => uploadFile('/api/v1/admin/uploads', uploadResponseSchema, file, onProgress, signal);
+const uploadVideo = (file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<VideoUploadResult> => uploadFile('/api/v1/admin/uploads/banner-video', heroVideoUploadResponseSchema, file, onProgress, signal);
+
+async function uploadFile<S extends z.ZodType>(endpoint: string, schema: S, file: File, onProgress?: (percent: number) => void, signal?: AbortSignal): Promise<z.infer<S>> {
   const csrf = await fetch('/api/v1/csrf-token', { credentials: 'same-origin', cache: 'no-store' }).then(response => response.json() as Promise<{ token: string }>);
-  return new Promise<UploadResult>((resolve, reject) => {
+  return new Promise<z.infer<S>>((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open('POST', '/api/v1/admin/uploads');
+    request.open('POST', endpoint);
     request.setRequestHeader('X-CSRF-Token', csrf.token);
     request.setRequestHeader('Accept', 'application/json');
     request.withCredentials = true;
@@ -32,7 +35,7 @@ async function uploadImage(file: File, onProgress?: (percent: number) => void, s
       let body: unknown = null;
       try { body = JSON.parse(request.responseText); } catch { /* non-JSON error body */ }
       if (request.status >= 200 && request.status < 300) {
-        const parsed = uploadResponseSchema.safeParse(body);
+        const parsed = schema.safeParse(body);
         if (parsed.success) resolve(parsed.data);
         else reject(new ApiError(502, 'invalid_response', 'We received an unexpected response from the server.'));
       } else {
@@ -88,13 +91,19 @@ export const adminRepository = (call: Caller) => ({
   content: {
     get: () => call('/admin/content', adminContentSchema),
     updateSettings: (settings: StoreSettings) => call('/admin/content/settings', storeSettingsSchema, { method: 'PUT', body: settings }),
-    updateHeroSlide: (id: string, slide: Omit<HeroSlide, 'id'>) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}`, heroSlideSchema, { method: 'PUT', body: slide }),
+    updateHeroSlide: (id: string, slide: HeroSlideInput) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}`, heroSlideSchema, { method: 'PUT', body: slide }),
+    createHeroSlide: (slide: HeroSlideInput) => call('/admin/content/hero-slides', heroSlideSchema, { method: 'POST', body: slide }),
+    deleteHeroSlide: (id: string) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
+    duplicateHeroSlide: (id: string) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}/duplicate`, heroSlideSchema, { method: 'POST' }),
+    reorderHeroSlides: (ids: string[]) => call('/admin/content/hero-slides/order', adminHeroOrderResultSchema, { method: 'PUT', body: { ids } }),
     pages: () => call('/admin/pages', adminPageListSchema),
     savePage: (slug: string, page: { title: string; body: string; published: boolean }) => call(`/admin/pages/${encodeURIComponent(slug)}`, adminPageSchema, { method: 'PUT', body: page }),
     removePage: (slug: string) => call(`/admin/pages/${encodeURIComponent(slug)}`, null, { method: 'DELETE' }),
   },
   uploads: {
     upload: uploadImage,
+    uploadBannerVideo: uploadVideo,
+    removeBannerVideo: (path: string) => call('/admin/uploads/banner-video', null, { method: 'DELETE', query: { path } }),
     remove: (path: string) => call('/admin/uploads', null, { method: 'DELETE', query: { path } }),
     cleanup: () => call('/admin/uploads/cleanup', null, { method: 'POST' }),
   },

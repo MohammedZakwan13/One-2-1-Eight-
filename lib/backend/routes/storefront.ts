@@ -6,7 +6,7 @@ import {
 } from '@/lib/api/schemas';
 import { CUSTOMER_SESSION_SECONDS, currentCustomer, requireCustomer } from '@/lib/backend/auth';
 import {
-  COOKIES, HttpError, db, imageUrl, isUnique, isUuid, json, must, newToken, pageParams, rateLimit, route, safeEqual, sha256, trackingToken,
+  COOKIES, HttpError, bannerVideoUrl, db, imageUrl, isUnique, isUuid, json, must, newToken, pageParams, rateLimit, route, safeEqual, sha256, trackingToken,
 } from '@/lib/backend/core';
 import {
   MAX_LINE_QUANTITY, ORDER_SELECT, PRODUCT_SELECT, applyCoupon, availability, getSettingsRow, loadOrder, orderMailData, paymentMethods, priceCart, reviewStats, selectRelated,
@@ -28,8 +28,18 @@ const LAYERING_CATEGORIES = ['hoodie', 'sweatshirt', 'drop-shoulder'];
 const DAY = 86_400;
 
 const categoryDto = (r: Row) => ({ id: r.id, name: r.name, slug: r.slug, image: imageUrl(r.image), active: r.active });
+/**
+ * Rows written before migration 0010 have none of the media columns: every one defaults to the old behaviour (image slots, own mobile image).
+ * An empty stored value stays empty (a video without a poster) instead of becoming the bucket's base URL.
+ */
 export const heroDto = (r: Row) => ({
-  id: r.id, kicker: r.kicker, title: r.title, body: r.body, desktopImage: imageUrl(r.desktop_image), mobileImage: imageUrl(r.mobile_image), cta: r.cta, href: r.href, active: r.active,
+  id: r.id, kicker: r.kicker, title: r.title, body: r.body,
+  desktopImage: r.desktop_image ? imageUrl(r.desktop_image) : '', mobileImage: r.mobile_image ? imageUrl(r.mobile_image) : '',
+  cta: r.cta, href: r.href, active: r.active,
+  desktopMediaType: r.desktop_media_type === 'video' ? 'video' : 'image', desktopVideo: bannerVideoUrl(r.desktop_video ?? ''),
+  mobileMediaType: r.mobile_media_type === 'video' ? 'video' : 'image', mobileVideo: bannerVideoUrl(r.mobile_video ?? ''),
+  useDesktopOnMobile: r.use_desktop_on_mobile === true, altText: r.alt_text ?? '',
+  sortOrder: Number(r.sort_order ?? 0), updatedAt: r.updated_at ?? '',
 });
 
 // ───────────── health ─────────────
@@ -162,7 +172,7 @@ route('GET', '/serviceability', async ({ url }) => {
 route('GET', '/content/storefront', async () => {
   const [settings, slides, categories] = await Promise.all([
     getSettingsRow(),
-    db().from('hero_slides').select('*').eq('active', true).order('sort_order'),
+    db().from('hero_slides').select('*').eq('active', true).order('sort_order').order('id'),
     db().from('categories').select('*').eq('active', true).order('sort_order'),
   ]);
   return { settings: toSettings(settings), heroSlides: (must(slides, 'hero') as Row[]).map(heroDto), categories: (must(categories, 'categories') as Row[]).map(categoryDto), paymentMethods: paymentMethods() };

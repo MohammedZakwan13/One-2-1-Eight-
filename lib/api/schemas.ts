@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parseTrackingUrl } from '@/lib/tracking-url';
 import { stockTextError } from '@/lib/inventory';
+import { effectiveMediaType } from '@/lib/hero-media';
 
 /**
  * Typed contract for the backend REST API.
@@ -169,16 +170,34 @@ export const storeSettingsSchema = z.object({
 });
 export type StoreSettings = z.infer<typeof storeSettingsSchema>;
 
+const heroMediaType = z.enum(['image', 'video']);
+/** A media URL that may be empty (a video without a poster, or a draft that has no media yet). */
+const optionalSafeUrl = z.union([z.literal(''), safeUrl]);
+
+/**
+ * One hero banner. The original fields keep their names and meaning (`desktopImage` / `mobileImage` stay the still pictures, and become
+ * the poster of a video slot). Everything added for video / independent mobile media has a default, so older payloads still parse.
+ */
 export const heroSlideSchema = z.object({
   id,
   kicker: z.string().max(80),
   title: z.string().max(160),
   body: z.string().max(240),
-  desktopImage: safeUrl,
-  mobileImage: safeUrl,
+  desktopImage: optionalSafeUrl,
+  mobileImage: optionalSafeUrl,
   cta: z.string().max(40),
   href: internalPath,
   active: z.boolean(),
+  desktopMediaType: heroMediaType.default('image'),
+  desktopVideo: optionalSafeUrl.default(''),
+  mobileMediaType: heroMediaType.default('image'),
+  mobileVideo: optionalSafeUrl.default(''),
+  useDesktopOnMobile: z.boolean().default(false),
+  altText: z.string().max(200).default(''),
+  /** Position in the carousel (1-based, set by the server). */
+  sortOrder: z.number().int().default(0),
+  /** Version stamp used to detect two admins editing the same banner. */
+  updatedAt: z.string().default(''),
 });
 export type HeroSlide = z.infer<typeof heroSlideSchema>;
 
@@ -510,7 +529,29 @@ export const adminCategoryUpdateSchema = z.object({ name: z.string().trim().min(
 export const adminCategoriesSchema = z.object({ items: z.array(categorySchema) });
 
 export const adminContentSchema = z.object({ settings: storeSettingsSchema, heroSlides: z.array(heroSlideSchema) });
-export const adminHeroSlideUpdateSchema = heroSlideSchema.omit({ id: true });
+/**
+ * Create / update a banner. A banner that is live (`active`) must have media for every device it is shown on; a draft may be saved
+ * incomplete. `expectedUpdatedAt` (updates only) makes the save fail with 409 when someone else changed the banner in the meantime.
+ */
+export const adminHeroSlideUpdateSchema = heroSlideSchema.omit({ id: true, sortOrder: true, updatedAt: true }).extend({ expectedUpdatedAt: z.string().max(64).optional() }).superRefine((slide, ctx) => {
+  if (!slide.active) return;
+  // Video is optional: a live banner needs visual media for each device, which is an image or a video. An image-mode slot needs its image;
+  // a video-mode slot needs its video; a "video" slot with no video file is simply an image slot (and needs the image).
+  const needs = (type: 'image' | 'video', image: string, video: string, path: 'desktop' | 'mobile') => {
+    if (effectiveMediaType(type, video) === 'image' && !image) ctx.addIssue({ code: 'custom', path: [`${path}Image`], message: `Add a ${path} image or video before publishing.` });
+  };
+  needs(slide.desktopMediaType, slide.desktopImage, slide.desktopVideo, 'desktop');
+  if (!slide.useDesktopOnMobile) needs(slide.mobileMediaType, slide.mobileImage, slide.mobileVideo, 'mobile');
+}).transform(slide => ({
+  ...slide,
+  // What is stored matches what is shown: a slot without a video file is an image slot, whatever the form said.
+  desktopMediaType: effectiveMediaType(slide.desktopMediaType, slide.desktopVideo),
+  mobileMediaType: effectiveMediaType(slide.mobileMediaType, slide.mobileVideo),
+}));
+export type HeroSlideInput = z.input<typeof adminHeroSlideUpdateSchema>;
+export const adminHeroOrderSchema = z.object({ ids: z.array(z.uuid()).min(1).max(500) });
+export const adminHeroOrderResultSchema = z.object({ items: z.array(heroSlideSchema) });
+export const heroVideoUploadResponseSchema = z.object({ path: z.string(), url: safeUrl, warnings: z.array(z.string()).default([]) });
 
 export const dashboardSummarySchema = z.object({
   orderCount: z.number().int().nonnegative(),

@@ -190,8 +190,20 @@ export const imageUrl = (stored: string) => (stored.startsWith('/') || /^https?:
 /** URL → stable storage path when it points at our bucket; anything else is kept as given. */
 export const storedImage = (url: string) => (url.startsWith(publicPrefix()) ? url.slice(publicPrefix().length) : url);
 export const isStoragePath = (stored: string) => !stored.startsWith('/') && !/^https?:\/\//.test(stored);
+
+/** Hero banner videos live in their own bucket (migration 0010) so the image bucket's image-only, 5 MB rules stay untouched. */
+export const BANNER_BUCKET = 'banner-media';
+const bannerPrefix = () => `${getServerEnv().supabase!.url}/storage/v1/object/public/${BANNER_BUCKET}/`;
+export const bannerVideoUrl = (stored: string) => (stored === '' || stored.startsWith('/') || /^https?:\/\//.test(stored) ? stored : `${bannerPrefix()}${stored}`);
+export const storedBannerVideo = (url: string) => (url.startsWith(bannerPrefix()) ? url.slice(bannerPrefix().length) : url);
+export async function removeBannerVideos(paths: string[]) {
+  const targets = [...new Set(paths.filter(path => path !== '' && isStoragePath(path)))];
+  if (!targets.length) return;
+  const { error } = await db().storage.from(BANNER_BUCKET).remove(targets);
+  if (error) console.error('[backend] banner video cleanup failed', error.message);
+}
 export async function removeStorageObjects(paths: string[]) {
-  const targets = [...new Set(paths.filter(isStoragePath))];
+  const targets = [...new Set(paths.filter(path => path !== '' && isStoragePath(path)))];
   if (!targets.length) return;
   const { error } = await db().storage.from(MEDIA_BUCKET).remove(targets);
   if (error) console.error('[backend] storage cleanup failed', error.message);

@@ -6,7 +6,7 @@ import { slugify } from '@/lib/format';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
-  adminCategoryCreateSchema, adminCategoryUpdateSchema, adminHeroSlideUpdateSchema, adminLoginRequestSchema, adminPageInputSchema, adminProductInputSchema, bulkFlagRequestSchema,
+  adminCategoryCreateSchema, adminCategoryUpdateSchema, adminLoginRequestSchema, adminPageInputSchema, adminProductInputSchema, bulkFlagRequestSchema,
   storeSettingsSchema, updateLeadStatusSchema, updateOrderStatusSchema, updateReturnSchema, updateReviewStatusSchema,
 } from '@/lib/api/schemas';
 import { ADMIN_SESSION_SECONDS, requireAdmin } from '@/lib/backend/auth';
@@ -17,6 +17,7 @@ import {
 import { ORDER_SELECT, PRODUCT_SELECT, getSettingsRow, loadOrder, orderMailData, toAdminProduct, toOrder, toProducts, toSettings, type Row } from '@/lib/backend/data';
 import { sendOrderEmail, sendReturnEmail } from '@/lib/backend/integrations';
 import { presentOrders, toReturnDto, trackingUrl } from '@/lib/backend/returns';
+import { cleanupBannerVideos } from '@/lib/backend/routes/hero-banners';
 import { heroDto } from '@/lib/backend/routes/storefront';
 import { getServerEnv } from '@/lib/env';
 
@@ -360,7 +361,7 @@ route('PATCH', '/admin/leads/:id', async ctx => {
 
 route('GET', '/admin/content', async ctx => {
   await requireAdmin(ctx, 'content');
-  const [settings, slides] = await Promise.all([getSettingsRow(), db().from('hero_slides').select('*').order('sort_order')]);
+  const [settings, slides] = await Promise.all([getSettingsRow(), db().from('hero_slides').select('*').order('sort_order').order('id')]);
   return { settings: toSettings(settings), heroSlides: (must(slides, 'hero') as Row[]).map(heroDto) };
 });
 route('PUT', '/admin/content/settings', async ctx => {
@@ -374,16 +375,7 @@ route('PUT', '/admin/content/settings', async ctx => {
   }).eq('id', 1).select('*').single(), 'settings') as Row;
   return toSettings(row);
 });
-route('PUT', '/admin/content/hero-slides/:id', async ctx => {
-  await requireAdmin(ctx, 'content');
-  if (!isUuid(ctx.params.id)) throw new HttpError(404, 'not_found', 'Slide not found.');
-  const s = await ctx.body(adminHeroSlideUpdateSchema);
-  const { data: old } = await db().from('hero_slides').select('desktop_image, mobile_image').eq('id', ctx.params.id).maybeSingle();
-  if (!old) throw new HttpError(404, 'not_found', 'Slide not found.');
-  const row = must(await db().from('hero_slides').update({ kicker: s.kicker, title: s.title, body: s.body, desktop_image: storedImage(s.desktopImage), mobile_image: storedImage(s.mobileImage), cta: s.cta, href: s.href, active: s.active }).eq('id', ctx.params.id).select('*').single(), 'slide') as Row;
-  await removeStorageObjects([old.desktop_image, old.mobile_image].filter(path => path !== row.desktop_image && path !== row.mobile_image));
-  return heroDto(row);
-});
+// Hero banner create / update / delete / duplicate / reorder / video upload: see lib/backend/routes/hero-banners.ts
 
 const pageDto = (r: Row) => ({ slug: r.slug, title: r.title, body: r.body, published: r.published, updatedAt: r.updated_at });
 route('GET', '/admin/pages', async ctx => {
@@ -456,6 +448,7 @@ route('POST', '/admin/uploads/cleanup', async ctx => {
   for (const r of must(await db().from('products').select('images'), 'refs') as Row[]) r.images.forEach((p: string) => referenced.add(p));
   for (const r of must(await db().from('categories').select('image'), 'refs') as Row[]) referenced.add(r.image);
   for (const r of must(await db().from('hero_slides').select('desktop_image, mobile_image'), 'refs') as Row[]) { referenced.add(r.desktop_image); referenced.add(r.mobile_image); }
+  // Banner videos are a separate bucket and are cleaned up by the banner routes, never by this walk of `uploads/`.
   const orphans: string[] = [];
   const cutoff = Date.now() - 24 * 3600 * 1000;
   const walk = async (prefix: string): Promise<void> => {
@@ -468,5 +461,5 @@ route('POST', '/admin/uploads/cleanup', async ctx => {
   };
   await walk('uploads');
   for (let i = 0; i < orphans.length; i += 100) await removeStorageObjects(orphans.slice(i, i + 100));
-  return { removed: orphans.length };
+  return { removed: orphans.length + (await cleanupBannerVideos()) };
 });

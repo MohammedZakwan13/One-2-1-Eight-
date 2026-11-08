@@ -1,9 +1,8 @@
 'use client';
 
-import React, { FormEvent, useEffect, useState } from 'react';
-import Link from 'next/link';
+import React, { FormEvent, useMemo, useState } from 'react';
 import { ArrowRight, ArrowUpRight, Check, CircleHelp, LockKeyhole, Mail, PackageCheck, Truck } from 'lucide-react';
-import { BrandMark } from '@/components/ui/brand-mark';
+import { HeroCarousel } from '@/components/storefront/hero-carousel';
 import { SmartImage } from '@/components/ui/smart-image';
 import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
@@ -23,19 +22,13 @@ export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }
   const { settings } = useStorefrontData();
   const { transition: onTransition, notify } = useUi();
   const { wishlist, onToggleWishlist } = useWishlistToggle();
-  const activeSlides = heroSlides.filter(slide => slide.active);
-  const [slideIndex, setSlideIndex] = useState(0);
+  const activeSlides = useMemo(() => heroSlides.filter(slide => slide.active), [heroSlides]);
   const [sellerForm, setSellerForm] = useState({ name: '', email: '', phone: '', type: 'Bulk purchase', quantity: '50–100 pieces', message: '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [leadError, setLeadError] = useState('');
-  useEffect(() => { if (slideIndex >= activeSlides.length) setSlideIndex(0); }, [slideIndex, activeSlides.length]);
-  useEffect(() => {
-    if (activeSlides.length < 2) return;
-    const id = window.setInterval(() => setSlideIndex(index => (index + 1) % activeSlides.length), 5400);
-    return () => window.clearInterval(id);
-  }, [activeSlides.length]);
-  const currentSlide = activeSlides[slideIndex];
+  // The Luxe band below reuses a banner still. A video banner may have no poster, so fall back to the first banner that has a picture.
+  const luxeImage = activeSlides[2]?.desktopImage || activeSlides.find(slide => slide.desktopImage)?.desktopImage || '';
   const submitLead = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
@@ -51,13 +44,7 @@ export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }
   };
   return <>
     <main className="home-main">
-      <section className="hero-section" aria-label="Featured campaign">
-        {currentSlide ? <Link href={currentSlide.href} className="hero-slide hero-slide-link" key={currentSlide.id} onClick={onTransition} aria-label="Shop all ONE 2 1 EIGHT menswear">
-          <picture className="hero-picture"><source media="(max-width: 600px)" srcSet={currentSlide.mobileImage} /><img className="hero-photo" src={currentSlide.desktopImage} alt={`${currentSlide.title.replace(/\n/g, ' ')} — ONE 2 1 EIGHT menswear campaign`} fetchPriority="high" onError={event => { event.currentTarget.style.opacity = '0'; }} /></picture>
-          <div className="hero-gradient" />
-          <div className="hero-content"><h1>{currentSlide.title.split('\n').map((line, idx) => <React.Fragment key={`${line}-${idx}`}>{line}{idx === 0 && currentSlide.title.includes('\n') && <br />}</React.Fragment>)}</h1><p>{currentSlide.body}</p></div>
-        </Link> : <div className="hero-empty"><BrandMark /><h1>{settings.brandLine}</h1></div>}
-      </section>
+      <HeroCarousel slides={activeSlides} brandLine={settings.brandLine} />
 
       <LuxeRail products={luxe} onTransition={onTransition} />
 
@@ -74,7 +61,7 @@ export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }
 
       <section className="product-section section-shell arrivals-section"><SectionHeading eyebrow="JUST IN, JUST RIGHT" title="New arrivals" description="Fresh proportions. New favourites waiting to happen." href="/collections/new-arrivals" onTransition={onTransition} /><ProductGrid products={latest} onToggleWishlist={onToggleWishlist} wishlist={wishlist} onTransition={onTransition} /></section>
 
-      <section className="luxe-feature"><SmartImage src={activeSlides[2]?.desktopImage || currentSlide?.desktopImage || ''} alt="One 2 1 Eight Luxe collection" /><div className="luxe-feature-overlay" /><div className="luxe-feature-content"><span className="eyebrow">THE PRIVATE EDIT</span><h2>ONE 2 1 EIGHT<br /><em>LUXE</em></h2><p>Elevated textures. Understated confidence.<br />A more considered kind of statement.</p><RouteLink href="/collections/one-2-1-eight-luxe" className="button button-ivory" onClick={onTransition}>ENTER THE LUXE EDIT <ArrowUpRight size={17} /></RouteLink></div><div className="luxe-feature-side">LIMITED / CURATED / ESSENTIAL</div></section>
+      <section className="luxe-feature"><SmartImage src={luxeImage} alt="One 2 1 Eight Luxe collection" /><div className="luxe-feature-overlay" /><div className="luxe-feature-content"><span className="eyebrow">THE PRIVATE EDIT</span><h2>ONE 2 1 EIGHT<br /><em>LUXE</em></h2><p>Elevated textures. Understated confidence.<br />A more considered kind of statement.</p><RouteLink href="/collections/one-2-1-eight-luxe" className="button button-ivory" onClick={onTransition}>ENTER THE LUXE EDIT <ArrowUpRight size={17} /></RouteLink></div><div className="luxe-feature-side">LIMITED / CURATED / ESSENTIAL</div></section>
 
       <section className="service-section section-shell" id="service"><SectionHeading eyebrow="THE STANDARD, BUILT IN" title="Considered from checkout to doorstep" description="The details should feel as good as the fit." /><div className="service-grid"><div className="service-card"><div className="service-icon"><Truck size={23} /></div><h3>Complimentary shipping</h3><p>Free shipping on orders over {money(settings.freeShippingThreshold)}. Clear delivery updates, from us to you.</p><span>01 / DELIVERY</span></div><div className="service-card"><div className="service-icon"><PackageCheck size={23} /></div><h3>7-day easy returns</h3><p>Try it on, find your fit. Eligible pieces can be returned within seven days of delivery.</p><span>02 / PEACE OF MIND</span></div><div className="service-card"><div className="service-icon"><CircleHelp size={23} /></div><h3>Real help, when needed</h3><p>Questions about fit, orders or bulk buying? Reach our team at {settings.contactEmail}.</p><span>03 / HERE TO HELP</span></div></div></section>
 

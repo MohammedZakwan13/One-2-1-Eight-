@@ -660,15 +660,59 @@ paths:
       responses:
         '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/StoreSettings' } } } }
         '422': { $ref: '#/components/responses/Error' }
+  /admin/content/hero-slides:
+    post:
+      tags: [Admin]
+      operationId: adminCreateHeroSlide
+      summary: Add a hero banner (any number of banners is allowed; it is appended to the end of the carousel)
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlideInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlide' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /admin/content/hero-slides/order:
+    put:
+      tags: [Admin]
+      operationId: adminReorderHeroSlides
+      summary: Save the carousel order. `ids` must list every banner exactly once; a stale list is refused with 409 order_changed.
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, minItems: 1, maxItems: 500, items: { type: string, format: uuid } } } } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/HeroSlide' } } } } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /admin/content/hero-slides/{id}:
     put:
       tags: [Admin]
       operationId: adminUpdateHeroSlide
+      summary: Update a hero banner. With `expectedUpdatedAt`, a banner changed by someone else in the meantime is refused with 409 slide_changed.
       security: [{ adminSession: [], csrf: [] }]
       parameters: [{ $ref: '#/components/parameters/Id' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlideInput' } } } }
       responses:
         '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlide' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteHeroSlide
+      summary: Delete a hero banner and any of its image / video files that no other banner uses
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/Error' }
+  /admin/content/hero-slides/{id}/duplicate:
+    post:
+      tags: [Admin]
+      operationId: adminDuplicateHeroSlide
+      summary: Copy a hero banner as a hidden draft placed right after the original (media files are shared, not copied)
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/HeroSlide' } } } }
         '404': { $ref: '#/components/responses/Error' }
 
   /ready:
@@ -781,6 +825,29 @@ paths:
       tags: [Admin]
       operationId: adminDeleteUpload
       summary: Delete an uploaded image that is not referenced by any product, category or banner
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ name: path, in: query, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deleted }
+        '409': { $ref: '#/components/responses/Error' }
+        '4XX': { $ref: '#/components/responses/Error' }
+  /admin/uploads/banner-video:
+    post:
+      tags: [Admin]
+      operationId: adminUploadBannerVideo
+      summary: Upload one hero banner video to the banner-media bucket
+      description: "multipart/form-data with a `file` field. MP4 (H.264) or WebM (VP8/VP9), max 12 MB. The container is verified from the file's bytes, not its name or declared MIME type; MP4 files that only contain HEVC/H.265 or AV1 are refused (422 unsupported_codec). `warnings` may advise re-exporting an MP4 with fast start."
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
+      responses:
+        '201': { description: Stored, content: { application/json: { schema: { type: object, required: [path, url], properties: { path: { type: string }, url: { $ref: '#/components/schemas/SafeUrl' }, warnings: { type: array, items: { type: string } } } } } } }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminDeleteBannerVideo
+      summary: Delete an uploaded banner video that no banner references
       security: [{ adminSession: [], csrf: [] }]
       parameters: [{ name: path, in: query, required: true, schema: { type: string } }]
       responses:
@@ -951,19 +1018,30 @@ components:
         - $ref: '#/components/schemas/HeroSlideInput'
         - type: object
           required: [id]
-          properties: { id: { type: string } }
+          properties:
+            id: { type: string }
+            sortOrder: { type: integer, description: Position in the carousel (1-based, set by the server) }
+            updatedAt: { type: string, description: Version stamp; send it back as expectedUpdatedAt when saving }
     HeroSlideInput:
       type: object
       required: [kicker, title, body, desktopImage, mobileImage, cta, href, active]
+      description: "`desktopImage` / `mobileImage` are the still pictures (the poster when the slot is a video) and may be empty. Every field added for video support is optional and defaults to the previous behaviour (image slots, own mobile image). A live banner (`active`) must have media for each device it is shown on; a draft may be incomplete."
       properties:
         kicker: { type: string }
         title: { type: string }
         body: { type: string }
-        desktopImage: { $ref: '#/components/schemas/SafeUrl' }
-        mobileImage: { $ref: '#/components/schemas/SafeUrl' }
+        desktopImage: { type: string, description: 'Site-relative path, https URL, or empty' }
+        mobileImage: { type: string, description: 'Site-relative path, https URL, or empty' }
         cta: { type: string }
         href: { type: string, pattern: '^/(?!/)\S*$', description: Site-relative path }
         active: { type: boolean }
+        desktopMediaType: { type: string, enum: [image, video], default: image }
+        desktopVideo: { type: string, default: '' }
+        mobileMediaType: { type: string, enum: [image, video], default: image }
+        mobileVideo: { type: string, default: '' }
+        useDesktopOnMobile: { type: boolean, default: false, description: Phones receive the desktop media }
+        altText: { type: string, maxLength: 200, default: '' }
+        expectedUpdatedAt: { type: string, description: Updates only; refused with 409 slide_changed when it no longer matches }
     StorefrontContent:
       type: object
       required: [settings, heroSlides, categories, paymentMethods]

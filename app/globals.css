@@ -12238,3 +12238,730 @@ button {
 .admin-app .admin-edit-form .admin-feature-flags input[type=checkbox] { width: 16px !important; height: 16px !important; min-height: 16px !important; }
 /* Size-stock fieldset: its S / M / L / XL / XXL labels are field headings, not options. */
 .admin-app .admin-edit-form .admin-feature-flags.admin-size-stock label { font-size: var(--admin-fs-label) !important; font-weight: 600; letter-spacing: .02em; color: var(--admin-heading) !important; }
+
+/* ───────────── Hero banners: storefront media ───────────── */
+.hero-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden
+}
+
+.hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 34%;
+  opacity: 0;
+  transition: opacity .5s ease;
+  background: transparent
+}
+
+.hero-video.is-ready {
+  opacity: 1
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-video {
+    display: none
+  }
+}
+
+/* ───────────── Hero banners: admin manager ───────────── */
+.hb-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap
+}
+
+.hb-add {
+  min-height: 40px;
+  padding: 0 18px;
+  font-size: 11px
+}
+
+.hb-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 4px 0 16px
+}
+
+.hb-stats>div {
+  background: #fff;
+  border: 1px solid #e1e5ea;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px
+}
+
+.hb-stats strong {
+  font: 500 26px var(--font-display)
+}
+
+.hb-stats span {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #697381
+}
+
+.hb-empty {
+  padding: 34px;
+  text-align: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center
+}
+
+.hb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px
+}
+
+.hb-card {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 360px) minmax(0, 1fr);
+  gap: 18px;
+  padding: 14px;
+  align-items: start
+}
+
+.hb-card.is-hidden .hb-card-media {
+  opacity: .72
+}
+
+.hb-card-order {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px
+}
+
+.slide-number-lite {
+  font: 500 24px var(--font-display);
+  color: #16181b
+}
+
+.hb-move {
+  display: flex;
+  flex-direction: column;
+  gap: 5px
+}
+
+.hb-move button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d9dde3;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer
+}
+
+.hb-move button:disabled {
+  opacity: .35;
+  cursor: not-allowed
+}
+
+.hb-card-media {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end
+}
+
+.hb-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0
+}
+
+.hb-thumb-frame {
+  position: relative;
+  background: #dad8d1;
+  overflow: hidden;
+  border: 1px solid #e1e5ea
+}
+
+.hb-thumb-desktop .hb-thumb-frame {
+  aspect-ratio: 16 / 7
+}
+
+.hb-thumb-mobile .hb-thumb-frame {
+  aspect-ratio: 9 / 16;
+  max-height: 150px;
+  margin: 0 auto
+}
+
+.hb-thumb-frame .smart-image,
+.hb-thumb-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover
+}
+
+.hb-thumb-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #697381;
+  text-align: center;
+  padding: 8px
+}
+
+.hb-thumb-badge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  background: #16181b;
+  color: #fff;
+  font-size: 9px;
+  letter-spacing: .08em;
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2
+}
+
+.hb-thumb-caption {
+  font-size: 10px;
+  color: #697381;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap
+}
+
+.hb-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px
+}
+
+.hb-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap
+}
+
+.hb-card-title h3 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere
+}
+
+.hb-card-body p {
+  margin: 0;
+  font-size: 12px;
+  color: #3d4652
+}
+
+.hb-card-body small {
+  font-size: 11px;
+  color: #697381;
+  overflow-wrap: anywhere
+}
+
+.hb-status {
+  font-size: 9px;
+  letter-spacing: .1em;
+  padding: 3px 7px;
+  background: #eceff3;
+  color: #697381
+}
+
+.hb-status.is-live {
+  background: #e3f1e6;
+  color: #2a6b3a
+}
+
+.hb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px
+}
+
+.hb-actions .admin-secondary-btn {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px
+}
+
+.hb-delete {
+  color: #a23b32
+}
+
+.hb-editor {
+  padding: 18px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 4px
+}
+
+.hb-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e9ecf0
+}
+
+.hb-editor-head h3 {
+  margin: 4px 0 0;
+  font-size: 18px
+}
+
+.hb-section {
+  padding: 16px 0;
+  border-bottom: 1px solid #eef0f3;
+  display: grid;
+  gap: 12px
+}
+
+.hb-section h4 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 9px
+}
+
+.hb-section h4 b {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #16181b;
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px
+}
+
+.hb-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #3d4652
+}
+
+.hb-section label small {
+  font-weight: 400;
+  color: #697381;
+  font-size: 11px
+}
+
+.hb-section input:not([type='checkbox']),
+.hb-section textarea {
+  border: 1px solid #d9dde3;
+  background: #fcfcfd;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  width: 100%;
+  min-width: 0
+}
+
+.hb-check {
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 10px !important;
+  font-weight: 400 !important;
+  background: #f6f4ef;
+  border: 1px solid #e9dfd0;
+  padding: 10px 12px
+}
+
+.hb-check input {
+  margin-top: 3px
+}
+
+.hb-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #697381;
+  line-height: 1.5
+}
+
+.hb-note {
+  background: #fbf3e2;
+  border: 1px solid #ecd9a8;
+  color: #7a5b12;
+  padding: 8px 10px;
+  font-size: 11px
+}
+
+.hb-note p {
+  margin: 0
+}
+
+.hb-slot {
+  border: 1px solid #e1e5ea;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  min-width: 0
+}
+
+.hb-slot legend {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px
+}
+
+.hb-slot.is-off {
+  opacity: .45
+}
+
+.hb-segment,
+.hb-preview-tabs {
+  display: inline-flex;
+  border: 1px solid #d9dde3;
+  width: fit-content
+}
+
+.hb-segment button,
+.hb-preview-tabs button {
+  border: 0;
+  background: #fff;
+  padding: 8px 14px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 36px
+}
+
+.hb-segment button+button,
+.hb-preview-tabs button+button {
+  border-left: 1px solid #d9dde3
+}
+
+.hb-segment button.is-active,
+.hb-preview-tabs button.is-active {
+  background: #16181b;
+  color: #fff
+}
+
+.hb-video-preview {
+  display: grid;
+  gap: 6px
+}
+
+.hb-video-preview video {
+  width: 100%;
+  max-height: 220px;
+  background: #16181b;
+  object-fit: contain
+}
+
+.hb-video-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #697381
+}
+
+.hb-video-meta .is-danger {
+  margin-left: auto;
+  border: 1px solid #e6c7c3;
+  background: #fff;
+  color: #a23b32;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer
+}
+
+.hb-preview {
+  display: grid;
+  gap: 10px
+}
+
+.hb-preview-stage {
+  position: relative;
+  overflow: hidden;
+  background: #3c3e3a;
+  color: #fff;
+  margin: 0 auto;
+  width: 100%
+}
+
+.hb-preview-desktop {
+  aspect-ratio: 16 / 6.5
+}
+
+.hb-preview-mobile {
+  aspect-ratio: 9 / 16;
+  max-width: 240px
+}
+
+.hb-preview-stage img,
+.hb-preview-stage video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover
+}
+
+.hb-preview-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(13, 15, 13, .6), rgba(13, 15, 13, .1) 70%)
+}
+
+.hb-preview-copy {
+  position: absolute;
+  left: 5%;
+  bottom: 12%;
+  display: grid;
+  gap: 4px;
+  max-width: 60%;
+  z-index: 2;
+  white-space: pre-line
+}
+
+.hb-preview-copy strong {
+  font: 500 clamp(14px, 2.4vw, 26px) var(--font-display)
+}
+
+.hb-preview-copy span {
+  font-size: 11px
+}
+
+.hb-editor-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-top: 12px
+}
+
+.hb-editor-actions .admin-primary-btn,
+.hb-editor-actions .admin-secondary-btn {
+  min-height: 40px
+}
+
+@media (max-width: 900px) {
+  .hb-card {
+    grid-template-columns: 48px minmax(0, 1fr)
+  }
+
+  .hb-card-body {
+    grid-column: 1 / -1
+  }
+
+  .hb-stats {
+    grid-template-columns: 1fr
+  }
+}
+
+/* ───────────── Hero carousel: pause / play (a small round icon inside the navigation bar; automatic movement must stay stoppable) ───────────── */
+.hero-nav-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateX(-50%);
+}
+
+.hero-pause {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(231, 212, 187, .45);
+  border-radius: 50%;
+  background: rgba(22, 23, 21, .35);
+  color: #f6efe4;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.hero-pause:hover {
+  background: rgba(22, 23, 21, .72);
+  border-color: #e7d4bb;
+}
+
+.hero-pause:focus-visible {
+  outline: 2px solid #e7d4bb;
+  outline-offset: 3px;
+}
+
+/* ───────────── Hero carousel: manual navigation (arrows, indicators, swipe) ───────────── */
+/* Vertical page scrolling stays with the browser; only sideways finger movement reaches the swipe handler. */
+.hero-section {
+  touch-action: pan-y;
+}
+
+.hero-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-top: -19px;
+  padding: 0;
+  border: 1px solid rgba(231, 212, 187, .55);
+  border-radius: 50%;
+  background: rgba(22, 23, 21, .42);
+  color: #f6efe4;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .25s ease, background .2s ease, border-color .2s ease;
+}
+
+.hero-arrow-prev {
+  left: clamp(10px, 1.6vw, 28px);
+}
+
+.hero-arrow-next {
+  right: clamp(10px, 1.6vw, 28px);
+}
+
+.hero-arrow:hover {
+  background: rgba(22, 23, 21, .72);
+  border-color: #e7d4bb;
+}
+
+.hero-arrow:focus-visible,
+.hero-dot:focus-visible {
+  outline: 2px solid #e7d4bb;
+  outline-offset: 3px;
+  opacity: 1;
+}
+
+/* With a mouse the arrows stay out of the way until the banner is hovered or a control has focus; touch screens always show them. */
+@media (hover: hover) and (pointer: fine) {
+  .hero-arrow {
+    opacity: 0;
+  }
+
+  .hero-section:hover .hero-arrow,
+  .hero-section:focus-within .hero-arrow {
+    opacity: 1;
+  }
+}
+
+.hero-indicators {
+  display: flex;
+  align-items: center;
+}
+
+.hero-dot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hero-dot span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: rgba(246, 239, 228, .45);
+  transition: background .25s ease, height .25s ease;
+}
+
+.hero-dot:hover span {
+  background: rgba(246, 239, 228, .8);
+}
+
+.hero-dot.is-active span {
+  height: 3px;
+  background: #e7d4bb;
+}
+
+.hero-counter {
+  margin-left: 10px;
+  font: 600 10px/1 var(--font-manrope, inherit);
+  letter-spacing: .14em;
+  color: rgba(246, 239, 228, .88);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+
+  /* On a phone the headline and copy sit at the BOTTOM of the banner, so the controls stay clear of them:
+     the arrows at the edges above the text, the pause icon and indicators on the bottom edge under the copy. */
+  .hero-arrow {
+    top: 40%;
+    width: 34px;
+    height: 34px;
+    margin-top: -17px;
+  }
+
+  .hero-arrow-prev {
+    left: 10px;
+  }
+
+  .hero-arrow-next {
+    right: 10px;
+  }
+
+  .hero-nav-bar {
+    bottom: 3px;
+  }
+
+  .hero-dot {
+    width: 26px;
+  }
+
+  .hero-dot span {
+    width: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .hero-arrow,
+  .hero-dot span,
+  .hero-pause {
+    transition: none;
+  }
+}

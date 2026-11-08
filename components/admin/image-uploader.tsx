@@ -1,12 +1,13 @@
 'use client';
 
-import { DragEvent, useRef, useState } from 'react';
+import { DragEvent, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Star, UploadCloud } from 'lucide-react';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { SmartImage } from '@/components/ui/smart-image';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_IMAGE_UPLOAD_LABEL } from '@/lib/upload-limits';
+import type { UploadSession } from '@/lib/upload-session';
 
 const ACCEPT = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 const MAX_BYTES = MAX_IMAGE_UPLOAD_BYTES;
@@ -20,7 +21,7 @@ type Pending = { key: string; name: string; percent: number };
  * admin saves, so a failed save never loses an image. Images uploaded in this session but not yet saved are deleted on removal.
  * `max={1}` turns it into a single-image field.
  */
-export function ImageUploader({ images, onChange, max = 12, label, hint }: { images: string[]; onChange: (images: string[]) => void; max?: number; label: string; hint?: string }) {
+export function ImageUploader({ images, onChange, max = 12, label, hint, onBusyChange, session }: { images: string[]; onChange: (images: string[]) => void; max?: number; label: string; hint?: string; /** Called with true while an upload is running (lets a form disable Save). */ onBusyChange?: (busy: boolean) => void; /** Optional: an editor-wide session that deletes images uploaded here but never saved when the editor closes or the save fails. */ session?: UploadSession }) {
   const input = useRef<HTMLInputElement>(null);
   const uploaded = useRef(new Map<string, string>());
   const replacing = useRef<number | null>(null);
@@ -31,12 +32,15 @@ export function ImageUploader({ images, onChange, max = 12, label, hint }: { ima
   const [errors, setErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const single = max === 1;
+  const busy = pending.length > 0;
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
 
   const commit = (next: string[]) => { current.current = next; onChange(next); };
   const discardUnsaved = (url: string) => {
     const path = uploaded.current.get(url);
     if (!path) return;
     uploaded.current.delete(url);
+    session?.forget(url);
     void api.admin.uploads.remove(path).catch(() => undefined);
   };
 
@@ -56,6 +60,7 @@ export function ImageUploader({ images, onChange, max = 12, label, hint }: { ima
       try {
         const result = await api.admin.uploads.upload(file, percent => setPending(list => list.map(item => (item.key === key ? { ...item, percent } : item))));
         uploaded.current.set(result.url, result.path);
+        session?.track(result.url, () => api.admin.uploads.remove(result.path));
         const base = current.current;
         if (replaceIndex !== null && base[replaceIndex] !== undefined) {
           const old = base[replaceIndex];

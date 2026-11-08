@@ -91,6 +91,8 @@ describe('frontend repositories ⇄ OpenAPI', () => {
       api.admin.content.pages(), api.admin.content.savePage('terms', { title: 't', body: 'b', published: true }), api.admin.content.removePage('terms'),
       api.admin.uploads.remove('uploads/2026/10/x.jpg'), api.admin.uploads.cleanup(),
       api.admin.content.updateHeroSlide('h1', { kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: true }),
+      api.admin.content.createHeroSlide({ kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: false }), api.admin.content.deleteHeroSlide('h1'),
+      api.admin.content.duplicateHeroSlide('h1'), api.admin.content.reorderHeroSlides(['h1', 'h2']), api.admin.uploads.removeBannerVideo('banners/2026/11/x.mp4'),
     ].map(swallow));
 
     expect(seen.length).toBeGreaterThan(40);
@@ -103,7 +105,7 @@ describe('frontend repositories ⇄ OpenAPI', () => {
     // every documented, frontend-facing operation is reachable through a repository (except probes and the multipart upload, which use their own transport)
     const used = new Set(seen.map(request => `${request.method} ${request.path.split('?')[0]}`));
     const unused = operations.filter(item => {
-      if (['/health', '/ready', '/csrf-token', '/admin/uploads'].includes(item.route) && (item.method === 'get' || item.route === '/admin/uploads' && item.method === 'post')) return false; // used by the proxy / browser transport directly
+      if (['/health', '/ready', '/csrf-token', '/admin/uploads', '/admin/uploads/banner-video'].includes(item.route) && (item.method === 'get' || item.route.startsWith('/admin/uploads') && item.method === 'post')) return false; // used by the proxy / browser transport directly
       if (item.route.endsWith('.csv')) return false; // plain download links
       return ![...used].some(key => key.startsWith(`${item.method.toUpperCase()} `) && templateRegex(item.route).test(key.slice(key.indexOf(' ') + 1)));
     }).map(item => item.key);
