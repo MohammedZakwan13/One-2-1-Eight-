@@ -16,6 +16,7 @@ import { money, slugify } from '@/lib/format';
 import { ComboInput } from '@/components/admin/combo-input';
 import { NumberInput } from '@/components/admin/number-input';
 import { lowStockSizesOfProduct, planStockSave, type StockMessageMode } from '@/lib/inventory';
+import { blankProductDraft, editorAfterSuccessfulSave, saveSuccessMessage, upsertProduct } from '@/lib/product-editor';
 import { COLOR_SWATCHES, colorToHex, FIT_OPTIONS, MATERIAL_OPTIONS, matchesMerchFilters, MERCH_FILTERS, type MerchFlag } from '@/lib/product-options';
 
 const totalStock = (product: AdminProduct) => product.variants.reduce((sum, variant) => sum + variant.stock, 0);
@@ -43,6 +44,8 @@ export function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  // Bumped on every confirmed save so the form (image uploader progress, combo/number inputs) remounts with no leftover local state.
+  const [formNonce, setFormNonce] = useState(0);
   const editorRef = useRef<HTMLElement>(null);
   const selected = products.find(product => product.id === selectedId);
 
@@ -53,28 +56,18 @@ export function AdminProducts() {
   const saveMutation = useMutation({
     mutationFn: (input: { id?: string; body: AdminProductInput }) => (input.id ? api.admin.products.update(input.id, input.body) : api.admin.products.create(input.body)),
     onSuccess: async (saved, variables) => {
-      client.setQueryData(['admin', 'products'], (old: { items: AdminProduct[]; total: number; page: number; pageSize: number } | undefined) => {
-        if (!old) return old;
-        const exists = old.items.some(p => p.id === saved.id);
-        const items = exists ? old.items.map(p => (p.id === saved.id ? saved : p)) : [saved, ...old.items];
-        return { ...old, items, total: exists ? old.total : old.total + 1 };
-      });
+      client.setQueryData(['admin', 'products'], (old: { items: AdminProduct[]; total: number; page: number; pageSize: number } | undefined) => (old ? upsertProduct(old, saved) : old));
       await refresh();
-      if (variables.id) {
-        // Update: stay on the same product with the saved values and return to the top of the editor.
-        setDraft(fromProduct(saved));
-        setSelectedId(saved.id);
-        setShowForm(false);
-        notify(`“${saved.name}” saved — storefront updated.`);
-      } else {
-        // Create: the product is confirmed and listed; open a fresh Add Product form for the next one.
-        setSelectedId('');
-        setShowForm(true);
-        setDraft(blankDraft());
-        notify(`“${saved.name}” created — storefront updated.`);
-      }
-      setFormErrors([]);
-      requestAnimationFrame(() => editorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+      // Only reached after the server confirmed the save: the saved product stays in the list, the editor returns to a blank new-product form.
+      const next = editorAfterSuccessfulSave(categories[0]?.id ?? '');
+      setSelectedId(next.selectedId);
+      setShowForm(next.showForm);
+      setDraft(next.draft);
+      setFormErrors(next.errors);
+      setFormNonce(value => value + 1);
+      notify(saveSuccessMessage(Boolean(variables.id)));
+      // Keep the page where it is; only bring the editor into view when its heading was scrolled off the top.
+      requestAnimationFrame(() => { const top = editorRef.current?.getBoundingClientRect().top ?? 0; if (top < 0) editorRef.current?.scrollIntoView({ block: 'start' }); });
     },
     onError: failure => {
       setFormErrors([errorMessage(failure)]);
@@ -89,7 +82,7 @@ export function AdminProducts() {
   });
 
   const filtered = products.filter(product => `${product.name} ${product.category} ${product.id}`.toLowerCase().includes(query.toLowerCase()) && matchesMerchFilters(product, merchFilters) && (!lowOnly || lowAt === undefined || lowSizes(product).length > 0));
-  const blankDraft = (): Draft => ({ name: '', slug: '', categoryId: categories[0]?.id ?? '', price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', stockMessageMode: 'none', stockMessageNumber: '', stockMessageReview: false, returnable: true, exchangeable: true, codEnabled: true, onlinePaymentEnabled: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'active', stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])) });
+  const blankDraft = (): Draft => blankProductDraft(categories[0]?.id ?? '');
   const startNew = () => { setShowForm(true); setSelectedId(''); setFormErrors([]); setDraft(blankDraft()); };
   const setStockMode = (mode: StockMessageMode) => setDraft(current => (current ? { ...current, stockMessageMode: mode, stockMessageNumber: mode === 'custom' ? current.stockMessageNumber : '' } : current));
   const patch = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(current => (current ? { ...current, [key]: value } : current));
@@ -126,7 +119,7 @@ export function AdminProducts() {
       <div className="admin-products-layout">
         <section className="admin-card admin-product-list-card"><div className="admin-list-toolbar"><div className="admin-input-icon"><Search size={16} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search catalogue" aria-label="Search catalogue" /></div><span>{filtered.length} products</span></div><div className="admin-merch-filters" role="group" aria-label="Filter by merchandising"><button type="button" className={merchFilters.length === 0 && !lowOnly ? 'active' : ''} aria-pressed={merchFilters.length === 0 && !lowOnly} onClick={() => { setMerchFilters([]); setLowOnly(false); }}>All products</button><button type="button" className={lowOnly ? 'active' : ''} aria-pressed={lowOnly} disabled={lowAt === undefined} onClick={() => setLowOnly(value => !value)}>Low stock{lowAt === undefined ? '' : ` (${products.filter(product => lowSizes(product).length > 0).length})`}</button>{MERCH_FILTERS.map(item => <button type="button" key={item.key} className={merchFilters.includes(item.key) ? 'active' : ''} aria-pressed={merchFilters.includes(item.key)} onClick={() => toggleMerch(item.key)}>{item.label}</button>)}</div><div className="admin-product-list">{filtered.length === 0 && <p className="admin-field-note">No products match your search and filters.</p>}{filtered.map(product => <button key={product.id} className={`admin-product-list-row ${selectedId === product.id && !showForm ? 'active' : ''}`} onClick={() => { setShowForm(false); setFormErrors([]); setSelectedId(product.id); }}><SmartImage src={product.images[0]} alt={product.name} /><span><strong>{product.name}</strong><small>{product.category} · {product.color}{product.status === 'draft' ? ' · Draft' : ''}</small><em>{money(product.price)}</em>{lowSizes(product).length > 0 && <b className="admin-low-badge">Low: {lowSizes(product).map(variant => `${variant.size} ${variant.stock}`).join(' · ')}</b>}</span><span className={`stock-indicator ${lowSizes(product).length > 0 ? 'stock-low' : ''}`}>{totalStock(product)} in stock</span></button>)}</div></section>
         <section className="admin-card admin-product-editor" ref={editorRef}><div className="admin-card-heading"><div><span className="eyebrow">{showForm ? 'NEW PRODUCT' : 'PRODUCT EDITOR'}</span><h2>{showForm ? 'Create a piece' : selected?.name || 'Select a product'}</h2></div>{!showForm && selected && <button className="admin-danger-quiet" onClick={remove} disabled={removeMutation.isPending}>DELETE</button>}</div>
-          {draft && (selected || showForm) ? <form onSubmit={save} className="admin-edit-form">
+          {draft && (selected || showForm) ? <form key={formNonce} onSubmit={save} className="admin-edit-form">
             <label>Product name<input required maxLength={200} value={draft.name} onChange={e => patch('name', e.target.value)} placeholder="Product name" /></label>
             <div className="admin-form-two"><label>URL slug<input value={draft.slug} onChange={e => patch('slug', e.target.value)} placeholder="auto-generated from the name" /></label><label>Category<select value={draft.categoryId} onChange={e => patch('categoryId', e.target.value)}>{categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label></div>
             <div className="admin-form-three"><label>Price (₹)<NumberInput min="0" step="1" value={draft.price} onChange={e => patch('price', Number(e.target.value))} /></label><label>Compare-at (₹)<NumberInput min="0" step="1" value={draft.compareAt} onChange={e => patch('compareAt', Number(e.target.value))} /></label><label>Status<select value={draft.status} onChange={e => patch('status', e.target.value as Draft['status'])}><option value="active">Active (visible)</option><option value="draft">Draft (hidden)</option></select></label></div>

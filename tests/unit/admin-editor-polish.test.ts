@@ -18,11 +18,11 @@ describe('Admin editor polish', () => {
     expect(products).not.toContain('datalist');
     expect(products).toMatch(/<ComboInput value=\{draft\.material\}[\s\S]*?options=\{MATERIAL_OPTIONS\}/);
   });
-  it('resets to a fresh form after create but keeps the product after update', () => {
+  it('resets to a fresh form after every confirmed save (create and update)', () => {
     expect(products).toContain('variables.id');
+    expect(products).toContain('editorAfterSuccessfulSave(');
     expect(products).toContain('blankDraft()');
-    expect(products).toContain("status: 'active'");
-    expect(products).toContain('scrollIntoView');
+    expect(read('lib/product-editor.ts')).toContain("status: 'active'");
   });
   it('anchors badge and discount tags to a box sized from the photo ratio, not the square frame', () => {
     const card = read('components/storefront/product-card.tsx');
