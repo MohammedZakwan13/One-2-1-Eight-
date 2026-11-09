@@ -11485,13 +11485,16 @@ button {
 
 /* The Buy Now action uses the same size validation and cart state as Add to Bag. */
 .buy-now-button {
+  --buy-now-blue: #1f4e8c;
+  --buy-now-blue-hover: #173b6b;
+  --buy-now-blue-active: #12305a;
   width: 100%;
   min-height: 52px;
   justify-content: space-between;
   padding: 0 18px;
   margin-top: 9px;
-  border: 1px solid var(--burgundy);
-  background: var(--burgundy);
+  border: 1px solid var(--buy-now-blue);
+  background: var(--buy-now-blue);
   color: var(--white);
   border-radius: 2px;
   font-size: 10px;
@@ -11501,17 +11504,19 @@ button {
 }
 
 .buy-now-button:hover {
-  border-color: var(--burgundy-hover);
-  background: var(--burgundy-hover);
+  border-color: var(--buy-now-blue-hover);
+  background: var(--buy-now-blue-hover);
   color: var(--white);
 }
 
 .buy-now-button:active {
+  border-color: var(--buy-now-blue-active);
+  background: var(--buy-now-blue-active);
   transform: scale(0.995);
 }
 
 .buy-now-button:focus-visible {
-  outline: 2px solid var(--burgundy);
+  outline: 2px solid var(--buy-now-blue);
   outline-offset: 3px;
 }
 
@@ -13035,4 +13040,30 @@ button {
   .gallery-arrow {
     transition: none;
   }
+}
+
+/* Homepage product-card badges (scoped to .product-section, which only the homepage uses): larger, higher-contrast, same top-left stack. */
+.product-section .product-card-tags { top: 10px; left: 10px; gap: 5px; max-width: min(calc(100% - 20px), calc(100cqw - 70px - (100cqw - 100%) / 2)); }
+.product-section .product-badge,
+.product-section .discount-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 2px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .22);
+}
+.product-section .product-badge { background: var(--accent-light); color: var(--ink); border: 1px solid rgba(186, 132, 82, .55); }
+.product-section .discount-badge { background: var(--ink); color: #fff; border: 1px solid rgba(231, 212, 187, .55); }
+@media (max-width: 760px) {
+  .product-section .product-card-tags { top: 7px; left: 7px; gap: 4px; max-width: min(calc(100% - 14px), calc(100cqw - 58px - (100cqw - 100%) / 2)); }
+  .product-section .product-badge,
+  .product-section .discount-badge { min-height: 23px; padding: 3px 8px; font-size: 10px; letter-spacing: .07em; }
 }
