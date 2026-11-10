@@ -13067,3 +13067,17 @@ button {
   .product-section .product-badge,
   .product-section .discount-badge { min-height: 23px; padding: 3px 8px; font-size: 10px; letter-spacing: .07em; }
 }
+
+/* Products catalogue: the empty / zero-results message sits in the middle of the results area only (below the search and filters). */
+.admin-product-list.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.admin-product-list-empty { margin: 0; max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .admin-product-list.is-empty { min-height: 200px; }
+}
