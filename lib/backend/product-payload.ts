@@ -3,9 +3,9 @@ import type { adminProductInputSchema } from '@/lib/api/schemas';
 import { HttpError, storedImage } from '@/lib/backend/core';
 
 /** The jsonb passed to save_product. `variants` / `expected_stock` are present ONLY when the admin explicitly changed stock (or is creating the product). */
-export const productPayload = (input: z.infer<typeof adminProductInputSchema>, id?: string) => ({
+export const productPayload = (input: z.infer<typeof adminProductInputSchema>, id?: string, images: string[] = input.images ?? []) => ({
   id: id ?? '', slug: input.slug, name: input.name, category_id: input.categoryId, price: input.price, compare_at: input.compareAt, color: input.color, color_hex: input.colorHex,
-  badge: input.badge ?? '', images: input.images.map(storedImage), fit: input.fit, material: input.material, description: input.description, best_seller: input.bestSeller,
+  badge: input.badge ?? '', images: images.map(storedImage), fit: input.fit, material: input.material, description: input.description, best_seller: input.bestSeller,
   new_arrival: input.newArrival, luxe: input.luxe, status: input.status, stock_display: 'status', stock_message: input.stockMessage?.trim() ?? '',
   ...(input.stockMessageMode ? { stock_message_mode: input.stockMessageMode } : {}),
   ...(input.stockMessageNumber !== undefined ? { stock_message_number: input.stockMessageNumber } : {}),

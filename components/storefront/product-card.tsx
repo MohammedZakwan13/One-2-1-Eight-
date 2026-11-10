@@ -16,7 +16,7 @@ export function ProductCard({ product, isSaved, onToggleWishlist, onTransition }
   const [ratio, setRatio] = useState(1);
   const onNaturalSize = useCallback((width: number, height: number) => setRatio(Math.min(4, Math.max(0.25, width / height))), []);
   return <article className="product-card">
-    <div className="product-card-media"><RouteLink href={href} onClick={onTransition} className="product-image-link"><SmartImage src={product.images[0]} alt={product.name} onNaturalSize={onNaturalSize} /></RouteLink>
+    <div className="product-card-media"><RouteLink href={href} onClick={onTransition} className="product-image-link"><SmartImage src={product.images[0] ?? ''} alt={product.name} onNaturalSize={onNaturalSize} /></RouteLink>
       {(product.badge || discount > 0) && <div className="product-card-image-box" style={{ ['--img-ratio' as string]: ratio }}><div className="product-card-tags">{product.badge && <span className="product-badge">{product.badge}</span>}{discount > 0 && <span className="discount-badge">-{discount}%</span>}</div></div>}
       <button className={`wishlist-float ${isSaved ? 'is-saved' : ''}`} aria-label={isSaved ? 'Remove from wishlist' : 'Add to wishlist'} onClick={() => onToggleWishlist(product.id, product.name)}><Heart size={19} fill={isSaved ? 'currentColor' : 'none'} strokeWidth={1.65} /></button>
       <RouteLink href={href} className="quick-add" onClick={onTransition}>VIEW PRODUCT <ArrowUpRight size={15} /></RouteLink>

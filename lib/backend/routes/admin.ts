@@ -1,6 +1,7 @@
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_IMAGE_UPLOAD_LABEL } from '@/lib/upload-limits';
 import { summarizeLowStock } from '@/lib/inventory';
 import { productPayload, saveProductError } from '@/lib/backend/product-payload';
+import { deletableImages, releasedImages, resolveCategoryImage, resolveProductImages } from '@/lib/image-refs';
 import 'server-only';
 import { slugify } from '@/lib/format';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,26 @@ import { presentOrders, toReturnDto, trackingUrl } from '@/lib/backend/returns';
 import { cleanupBannerVideos } from '@/lib/backend/routes/hero-banners';
 import { heroDto } from '@/lib/backend/routes/storefront';
 import { getServerEnv } from '@/lib/env';
+
+/**
+ * Is this stored image still used by any product, category or banner? `null` = could not tell (treated as "yes": never delete on doubt).
+ */
+async function imageReferenced(path: string): Promise<boolean | null> {
+  const [products, categories, slides] = await Promise.all([
+    db().from('products').select('id', { count: 'exact', head: true }).contains('images', [path]),
+    db().from('categories').select('id', { count: 'exact', head: true }).eq('image', path),
+    db().from('hero_slides').select('id', { count: 'exact', head: true }).or(`desktop_image.eq.${path},mobile_image.eq.${path}`),
+  ]);
+  if (products.error || categories.error || slides.error) return null;
+  return (products.count ?? 0) + (categories.count ?? 0) + (slides.count ?? 0) > 0;
+}
+/** Called only AFTER the database change succeeded: deletes just the released objects that nothing references any more. */
+async function removeIfUnreferenced(released: string[]) {
+  const candidates = [...new Set(released.filter(path => path !== '' && isStoragePath(path)))];
+  if (!candidates.length) return;
+  const answers = new Map<string, boolean | null>(await Promise.all(candidates.map(async path => [path, await imageReferenced(path)] as const)));
+  await removeStorageObjects(deletableImages(candidates, answers));
+}
 
 const categoryDto = (r: Row) => ({ id: r.id, name: r.name, slug: r.slug, image: imageUrl(r.image), active: r.active });
 
@@ -109,7 +130,9 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
     if (probe.error) throw new HttpError(503, 'migration_required', 'Saving products now requires database migration 0008. Ask the developer to apply it.');
   }
   const oldImages: string[] = id ? ((await db().from('products').select('images').eq('id', id).maybeSingle()).data?.images ?? []) : [];
-  const { data, error } = await db().rpc('save_product', { p: productPayload(input, id), p_actor: adminId });
+  // Omitted images on an update keep the stored ones; an explicit empty array removes them all.
+  const images = resolveProductImages(input.images, oldImages.map(imageUrl));
+  const { data, error } = await db().rpc('save_product', { p: productPayload(input, id, images), p_actor: adminId });
   if (error) {
     if (isUnique(error, 'products_slug_key')) throw new HttpError(409, 'slug_taken', 'Another product already uses that URL slug.', { slug: ['Slug already in use'] });
     if (isUnique(error, 'sku')) throw new HttpError(409, 'sku_taken', 'A SKU is already used by another product.', { variants: ['SKU already in use'] });
@@ -135,8 +158,8 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
       throw new HttpError(500, 'server_error', 'Failed to update product policies.');
     }
   }
-  const kept = new Set(input.images.map(storedImage));
-  await removeStorageObjects(oldImages.filter(path => !kept.has(path)));
+  // The database save succeeded: only now release files this product no longer uses (and only if no other record shares them).
+  await removeIfUnreferenced(releasedImages(oldImages, images.map(storedImage)));
   return adminProductById(data as string);
 }
 
@@ -174,7 +197,7 @@ route('DELETE', '/admin/products/:id', async ctx => {
   const { error } = await db().from('products').delete().eq('id', product.id);
   if (error?.code === '23503') throw new HttpError(409, 'product_has_orders', 'This product has orders. Set it to draft instead of deleting it.');
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
-  await removeStorageObjects(product.images);
+  await removeIfUnreferenced(product.images);
   return null;
 });
 
@@ -193,7 +216,7 @@ route('POST', '/admin/categories', async ctx => {
   if (!slug) throw new HttpError(422, 'validation_failed', 'Enter a URL name using letters or numbers.', { slug: ['Required'] });
   if (RESERVED_CATEGORY_SLUGS.includes(slug)) throw new HttpError(422, 'validation_failed', 'That URL is reserved for a built-in collection. Choose another.', { slug: ['Reserved'] });
   const { data: last } = await db().from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
-  const { data, error } = await db().from('categories').insert({ slug, name: input.name, image: storedImage(input.image), active: input.active, sort_order: (last?.sort_order ?? 0) + 1 }).select('*').single();
+  const { data, error } = await db().from('categories').insert({ slug, name: input.name, image: storedImage(input.image ?? ''), active: input.active, sort_order: (last?.sort_order ?? 0) + 1 }).select('*').single();
   if (error) {
     if (isUnique(error)) throw new HttpError(409, 'slug_taken', 'Another category already uses that URL.', { slug: ['Already in use'] });
     console.error('[backend] create category', error.message);
@@ -208,8 +231,8 @@ route('PUT', '/admin/categories/:id', async ctx => {
   const { data: old } = await db().from('categories').select('image').eq('id', ctx.params.id).maybeSingle();
   if (!old) throw new HttpError(404, 'not_found', 'Category not found.');
   // Slug is stable by design: renaming a category must not break URLs or product links.
-  const row = must(await db().from('categories').update({ name: input.name, image: storedImage(input.image), active: input.active }).eq('id', ctx.params.id).select('*').single(), 'category') as Row;
-  if (old.image !== row.image) await removeStorageObjects([old.image]);
+  const row = must(await db().from('categories').update({ name: input.name, image: storedImage(resolveCategoryImage(input.image, imageUrl(old.image))), active: input.active }).eq('id', ctx.params.id).select('*').single(), 'category') as Row;
+  if (old.image !== row.image) await removeIfUnreferenced([old.image]);
   return categoryDto(row);
 });
 
@@ -226,7 +249,7 @@ route('DELETE', '/admin/categories/:id', async ctx => {
   const { error } = await db().from('categories').delete().eq('id', category.id);
   if (error?.code === '23503') throw new HttpError(409, 'category_in_use', `“${category.name}” is still referenced by products.`);
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
-  await removeStorageObjects([category.image]);
+  await removeIfUnreferenced([category.image]);
   return null;
 });
 

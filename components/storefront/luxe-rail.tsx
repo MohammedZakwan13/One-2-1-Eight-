@@ -230,7 +230,7 @@ export function LuxeRail({ products, onTransition }: { products: Product[]; onTr
                 onClick={onTransition}
               >
                 <span className="luxe-tile-name">{product.name}</span>
-                <SmartImage src={product.images[0]} alt={product.name} />
+                <SmartImage src={product.images[0] ?? ''} alt={product.name} />
               </RouteLink>
             </div>
           ))}

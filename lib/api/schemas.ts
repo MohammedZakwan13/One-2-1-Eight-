@@ -24,6 +24,8 @@ export const safeUrl = z.string().min(1).max(2048).refine(
   value => (value.startsWith('/') && !value.startsWith('//')) || /^https:\/\/[^\s]+$/i.test(value),
   { message: 'Must be a site-relative path or an https:// URL' },
 );
+/** An image reference that may be absent: '' means "no image". Never a fake placeholder URL. */
+export const optionalImageUrl = z.union([z.literal(''), safeUrl]);
 export const internalPath = z.string().min(1).max(512).regex(/^\/(?!\/)[^\s]*$/, 'Must be a site-relative path');
 const id = z.string().min(1).max(128);
 const isoDateTime = z.string().min(10).max(40);
@@ -64,7 +66,7 @@ export const productSchema = z.object({
   rating: z.number().min(0).max(5),
   reviewCount: z.number().int().nonnegative(),
   badge: z.string().max(40).nullish(),
-  images: z.array(safeUrl).min(1).max(12),
+  images: z.array(safeUrl).max(12),
   fit: z.string().max(120),
   material: z.string().max(160),
   description: z.string().max(5000),
@@ -97,7 +99,7 @@ export const paginated = <T extends z.ZodType>(item: T) =>
 export const productListSchema = paginated(productSchema);
 export type ProductList = z.infer<typeof productListSchema>;
 
-export const categorySchema = z.object({ id, name: z.string().min(1).max(80), slug: z.string().min(1).max(80), image: safeUrl, active: z.boolean() });
+export const categorySchema = z.object({ id, name: z.string().min(1).max(80), slug: z.string().min(1).max(80), image: optionalImageUrl, active: z.boolean() });
 export type Category = z.infer<typeof categorySchema>;
 
 export const collectionSchema = z.object({ slug: z.string().min(1).max(80), title: z.string().min(1).max(120), description: z.string().max(500) });
@@ -271,7 +273,7 @@ export const cartLineSchema = z.object({
   productId: id,
   slug: z.string(),
   name: z.string(),
-  image: safeUrl,
+  image: optionalImageUrl,
   color: z.string(),
   size: z.string(),
   quantity: z.number().int().positive(),
@@ -330,7 +332,7 @@ export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
 export const orderLineSchema = z.object({
   /** order_items.id: what a return request refers to. */
   id: id.optional(), returnable: z.boolean().optional(), exchangeable: z.boolean().optional(), returnedQuantity: z.number().int().nonnegative().optional(),
-  productId: id, variantId: id, name: z.string(), image: safeUrl, size: z.string(), color: z.string(),
+  productId: id, variantId: id, name: z.string(), image: optionalImageUrl, size: z.string(), color: z.string(),
   quantity: z.number().int().positive(), unitPrice: money, lineTotal: money,
 });
 export const orderStatusSchema = z.enum(['pending_payment', 'confirmed', 'processing', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded']);
@@ -444,7 +446,8 @@ export const adminProductInputSchema = z.object({
   color: z.string().trim().min(1).max(60),
   colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   badge: z.string().trim().max(40).nullish(),
-  images: z.array(safeUrl).min(1).max(12),
+  /** Optional. Omitted on an update = keep the current images; an explicit [] = remove them all. */
+  images: z.array(safeUrl).max(12).optional(),
   fit: z.string().trim().max(120),
   material: z.string().trim().max(160),
   description: z.string().trim().max(5000),
@@ -522,10 +525,12 @@ export const adminCategoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
   /** Optional; derived from the name when omitted. Lower-case words joined by hyphens. */
   slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lower-case letters, numbers and hyphens').max(60).optional(),
-  image: safeUrl,
+  /** Optional; '' or omitted = no image. */
+  image: optionalImageUrl.optional(),
   active: z.boolean(),
 });
-export const adminCategoryUpdateSchema = z.object({ name: z.string().trim().min(1).max(80), image: safeUrl, active: z.boolean() });
+/** `image` omitted = keep the current image; '' = remove it. */
+export const adminCategoryUpdateSchema = z.object({ name: z.string().trim().min(1).max(80), image: optionalImageUrl.optional(), active: z.boolean() });
 export const adminCategoriesSchema = z.object({ items: z.array(categorySchema) });
 
 export const adminContentSchema = z.object({ settings: storeSettingsSchema, heroSlides: z.array(heroSlideSchema) });

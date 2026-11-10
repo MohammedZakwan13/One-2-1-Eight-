@@ -186,7 +186,8 @@ export async function handleBackendRequest(req: Request, options: { clientIp?: s
 export const MEDIA_BUCKET = 'media';
 const publicPrefix = () => `${getServerEnv().supabase!.url}/storage/v1/object/public/${MEDIA_BUCKET}/`;
 /** Stored value → URL the browser can load. Local `/images/…` assets and absolute URLs pass through. */
-export const imageUrl = (stored: string) => (stored.startsWith('/') || /^https?:\/\//.test(stored) ? stored : `${publicPrefix()}${stored}`);
+/** '' (no image) stays '' — it must never become the bare bucket prefix. */
+export const imageUrl = (stored: string) => (stored === '' || stored.startsWith('/') || /^https?:\/\//.test(stored) ? stored : `${publicPrefix()}${stored}`);
 /** URL → stable storage path when it points at our bucket; anything else is kept as given. */
 export const storedImage = (url: string) => (url.startsWith(publicPrefix()) ? url.slice(publicPrefix().length) : url);
 export const isStoragePath = (stored: string) => !stored.startsWith('/') && !/^https?:\/\//.test(stored);
