@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- database rows are validated by the API schemas at the HTTP boundary */
 import 'server-only';
-import type { AdminProduct, Cart, Order, Product, StoreSettings } from '@/lib/api/schemas';
+import { luxeFeatureSchema, type AdminProduct, type Cart, type LuxeFeature, type Order, type Product, type StoreSettings } from '@/lib/api/schemas';
 import { getServerEnv } from '@/lib/env';
 import { HttpError, db, imageUrl, must, trackingUrl } from '@/lib/backend/core';
 
@@ -21,6 +21,19 @@ export const toSettings = (r: Row): StoreSettings => ({
   returnPolicy: r.return_policy, seoTitle: r.seo_title, seoDescription: r.seo_description, contactEmail: r.contact_email, contactPhone: r.contact_phone,
   instagramUrl: r.instagram_url, whatsappNumber: r.whatsapp_number, productOfferCode: r.product_offer_code, productOfferText: r.product_offer_text,
 });
+
+/** Saved Luxe band content as the API shows it. Anything missing or invalid is treated as "not configured" (the storefront then uses its built-in copy). */
+export const toLuxeFeature = (r: Row): LuxeFeature | null => {
+  const v = r.luxe_feature;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const text = (key: string) => (typeof v[key] === 'string' ? v[key] : '');
+  const parsed = luxeFeatureSchema.safeParse({
+    enabled: v.enabled !== false, image: text('image') ? imageUrl(text('image')) : '', imageAlt: text('imageAlt'), eyebrow: text('eyebrow'), heading: text('heading'),
+    bodyLine1: text('bodyLine1'), bodyLine2: text('bodyLine2'), ctaLabel: text('ctaLabel'), ctaHref: text('ctaHref'),
+  });
+  if (!parsed.success) { console.error('[backend] luxe_feature is invalid; the storefront uses its default copy'); return null; }
+  return parsed.data;
+};
 
 export const paymentMethods = (): Array<'upi' | 'card' | 'cod'> => (getServerEnv().razorpay ? ['upi', 'card', 'cod'] : ['cod']);
 

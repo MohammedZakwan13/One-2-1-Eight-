@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { ApiError, errorFromResponse } from '@/lib/api/errors';
 import type { Caller } from '@/lib/api/http';
 import {
-  adminCategoriesSchema, adminContentSchema, adminLeadListSchema, adminLeadSchema, adminLoginResponseSchema, adminMeSchema,
+  adminCategoriesSchema, adminContentSchema, adminLuxeFeatureSchema, luxeFeatureSchema, type LuxeFeature, adminLeadListSchema, adminLeadSchema, adminLoginResponseSchema, adminMeSchema,
   adminOrderListSchema, adminPageListSchema, adminPageSchema, adminProductListSchema, adminProductSchema, adminReviewListSchema, adminReviewSchema,
   apiErrorBodySchema, dashboardSummarySchema, heroSlideSchema, orderSchema, storeSettingsSchema, categorySchema, uploadResponseSchema,
   type AdminProductInput, type StoreSettings, type UpdateOrderStatus,
@@ -90,6 +90,8 @@ export const adminRepository = (call: Caller) => ({
   },
   content: {
     get: () => call('/admin/content', adminContentSchema),
+    getLuxeFeature: () => call('/admin/content/luxe-feature', adminLuxeFeatureSchema),
+    updateLuxeFeature: (feature: LuxeFeature) => call('/admin/content/luxe-feature', luxeFeatureSchema, { method: 'PUT', body: feature }),
     updateSettings: (settings: StoreSettings) => call('/admin/content/settings', storeSettingsSchema, { method: 'PUT', body: settings }),
     updateHeroSlide: (id: string, slide: HeroSlideInput) => call(`/admin/content/hero-slides/${encodeURIComponent(id)}`, heroSlideSchema, { method: 'PUT', body: slide }),
     createHeroSlide: (slide: HeroSlideInput) => call('/admin/content/hero-slides', heroSlideSchema, { method: 'POST', body: slide }),

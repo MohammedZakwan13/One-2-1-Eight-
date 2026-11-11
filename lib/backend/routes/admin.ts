@@ -7,15 +7,15 @@ import { slugify } from '@/lib/format';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
-  adminCategoryCreateSchema, adminCategoryUpdateSchema, adminLoginRequestSchema, adminPageInputSchema, adminProductInputSchema, bulkFlagRequestSchema,
+  adminCategoryCreateSchema, adminCategoryUpdateSchema, luxeFeatureSchema, adminLoginRequestSchema, adminPageInputSchema, adminProductInputSchema, bulkFlagRequestSchema,
   storeSettingsSchema, updateLeadStatusSchema, updateOrderStatusSchema, updateReturnSchema, updateReviewStatusSchema,
 } from '@/lib/api/schemas';
 import { ADMIN_SESSION_SECONDS, requireAdmin } from '@/lib/backend/auth';
 import {
   HttpError, MEDIA_BUCKET, authClient, csv, db, imageUrl, isStoragePath, isUnique, isUuid, json, must, newToken, pageParams, rateLimit, removeStorageObjects, route, sha256,
-  storedImage,
+  storedImage, storedLuxeImage,
 } from '@/lib/backend/core';
-import { ORDER_SELECT, PRODUCT_SELECT, getSettingsRow, loadOrder, orderMailData, toAdminProduct, toOrder, toProducts, toSettings, type Row } from '@/lib/backend/data';
+import { ORDER_SELECT, PRODUCT_SELECT, getSettingsRow, loadOrder, orderMailData, toAdminProduct, toLuxeFeature, toOrder, toProducts, toSettings, type Row } from '@/lib/backend/data';
 import { sendOrderEmail, sendReturnEmail } from '@/lib/backend/integrations';
 import { presentOrders, toReturnDto, trackingUrl } from '@/lib/backend/returns';
 import { cleanupBannerVideos } from '@/lib/backend/routes/hero-banners';
@@ -31,8 +31,9 @@ async function imageReferenced(path: string): Promise<boolean | null> {
     db().from('categories').select('id', { count: 'exact', head: true }).eq('image', path),
     db().from('hero_slides').select('id', { count: 'exact', head: true }).or(`desktop_image.eq.${path},mobile_image.eq.${path}`),
   ]);
-  if (products.error || categories.error || slides.error) return null;
-  return (products.count ?? 0) + (categories.count ?? 0) + (slides.count ?? 0) > 0;
+  const luxe = await storedLuxeImage();
+  if (products.error || categories.error || slides.error || !luxe.ok) return null;
+  return (products.count ?? 0) + (categories.count ?? 0) + (slides.count ?? 0) > 0 || luxe.path === path;
 }
 /** Called only AFTER the database change succeeded: deletes just the released objects that nothing references any more. */
 async function removeIfUnreferenced(released: string[]) {
@@ -398,6 +399,34 @@ route('PUT', '/admin/content/settings', async ctx => {
   }).eq('id', 1).select('*').single(), 'settings') as Row;
   return toSettings(row);
 });
+
+// Homepage "THE PRIVATE EDIT" (Luxe feature) band. Stored in store_settings.luxe_feature (migration 0011). Until that migration is applied the
+// storefront keeps showing the built-in copy and saving is refused with a clear message; nothing else is affected.
+const luxeColumnMissing = (message: string | undefined) => /luxe_feature/.test(message ?? '');
+route('GET', '/admin/content/luxe-feature', async ctx => {
+  await requireAdmin(ctx, 'content');
+  const row = await getSettingsRow();
+  return { luxeFeature: toLuxeFeature(row), available: 'luxe_feature' in row };
+});
+route('PUT', '/admin/content/luxe-feature', async ctx => {
+  await requireAdmin(ctx, 'content');
+  const input = await ctx.body(luxeFeatureSchema);
+  const migrationRequired = () => new HttpError(503, 'migration_required', 'Editing this section requires database migration 0011. Please apply supabase/migrations/0011_luxe_feature.sql.');
+  const before = await getSettingsRow();
+  if (!('luxe_feature' in before)) throw migrationRequired();
+  const oldImage: string = typeof before.luxe_feature?.image === 'string' ? before.luxe_feature.image : '';
+  const stored = { enabled: input.enabled, image: storedImage(input.image), imageAlt: input.imageAlt, eyebrow: input.eyebrow, heading: input.heading, bodyLine1: input.bodyLine1, bodyLine2: input.bodyLine2, ctaLabel: input.ctaLabel, ctaHref: input.ctaHref };
+  const { data, error } = await db().from('store_settings').update({ luxe_feature: stored, updated_at: new Date().toISOString() }).eq('id', 1).select('*').single();
+  if (error) {
+    if (luxeColumnMissing(error.message)) throw migrationRequired();
+    console.error('[backend] luxe feature save', error.message);
+    throw new HttpError(500, 'server_error', 'Something went wrong.');
+  }
+  // Saved. Only now may the previous picture be released, and only if nothing else (product, category, banner) still uses it.
+  if (oldImage && oldImage !== stored.image) await removeIfUnreferenced([oldImage]);
+  return toLuxeFeature(data as Row) ?? input;
+});
+
 // Hero banner create / update / delete / duplicate / reorder / video upload: see lib/backend/routes/hero-banners.ts
 
 const pageDto = (r: Row) => ({ slug: r.slug, title: r.title, body: r.body, published: r.published, updatedAt: r.updated_at });
@@ -459,7 +488,8 @@ route('DELETE', '/admin/uploads', async ctx => {
     db().from('categories').select('id', { count: 'exact', head: true }).eq('image', path),
     db().from('hero_slides').select('id', { count: 'exact', head: true }).or(`desktop_image.eq.${path},mobile_image.eq.${path}`),
   ]);
-  if ((products.count ?? 0) + (categories.count ?? 0) + (slides.count ?? 0) > 0) throw new HttpError(409, 'image_in_use', 'That image is still used by a product, category or banner.');
+  const luxe = await storedLuxeImage();
+  if ((products.count ?? 0) + (categories.count ?? 0) + (slides.count ?? 0) > 0 || !luxe.ok || luxe.path === path) throw new HttpError(409, 'image_in_use', 'That image is still used by a product, category, banner or the homepage Luxe band.');
   await removeStorageObjects([path]);
   return null;
 });
@@ -471,6 +501,10 @@ route('POST', '/admin/uploads/cleanup', async ctx => {
   for (const r of must(await db().from('products').select('images'), 'refs') as Row[]) r.images.forEach((p: string) => referenced.add(p));
   for (const r of must(await db().from('categories').select('image'), 'refs') as Row[]) referenced.add(r.image);
   for (const r of must(await db().from('hero_slides').select('desktop_image, mobile_image'), 'refs') as Row[]) { referenced.add(r.desktop_image); referenced.add(r.mobile_image); }
+  // The homepage Luxe band image counts as used; if that cannot be determined, nothing is cleaned up.
+  const luxe = await storedLuxeImage();
+  if (!luxe.ok) throw new HttpError(503, 'server_error', 'Could not verify which images are in use, so nothing was removed.');
+  referenced.add(luxe.path);
   // Banner videos are a separate bucket and are cleaned up by the banner routes, never by this walk of `uploads/`.
   const orphans: string[] = [];
   const cutoff = Date.now() - 24 * 3600 * 1000;

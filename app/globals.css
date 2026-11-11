@@ -13081,3 +13081,13 @@ button {
 @media (max-width: 760px) {
   .admin-product-list.is-empty { min-height: 200px; }
 }
+
+/* Admin preview of the homepage Luxe band: the same markup and styles as the storefront, at a smaller size inside the editor card. */
+.lf-preview { border: 1px solid #e3e0d9; overflow: hidden; border-radius: 2px; }
+.lf-preview .luxe-feature { height: 340px; }
+.lf-preview .luxe-feature-content { left: 28px; }
+.lf-preview .luxe-feature-content h2 { font-size: clamp(30px, 4.2vw, 56px); }
+.lf-preview .luxe-feature-side { right: 14px; bottom: 14px; }
+.lf-preview .button { pointer-events: none; }
+.lf-preview.is-hidden { opacity: .45; filter: grayscale(.6); }
+.lf-editor .hb-editor-head { align-items: flex-start; gap: 16px; }

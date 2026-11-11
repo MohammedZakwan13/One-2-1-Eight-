@@ -8,6 +8,8 @@ import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { LuxeRail } from '@/components/storefront/luxe-rail';
+import { LuxeFeatureBand } from '@/components/storefront/luxe-feature-band';
+import { luxeFallbackImage, resolveLuxeFeature } from '@/lib/luxe-feature';
 import { Footer } from '@/components/storefront/footer';
 import { money } from '@/lib/format';
 import { useUi } from '@/components/providers/app-providers';
@@ -15,10 +17,10 @@ import { useStorefrontData } from '@/components/providers/storefront-data';
 import { useWishlistToggle } from '@/lib/hooks/use-wishlist-toggle';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
-import type { Category, HeroSlide, Product } from '@/lib/api/schemas';
+import type { Category, HeroSlide, LuxeFeature, Product } from '@/lib/api/schemas';
 import { isStorefrontCategory } from '@/lib/catalog';
 
-export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }: { heroSlides: HeroSlide[]; categories: Category[]; featured: Product[]; latest: Product[]; luxe?: Product[] }) {
+export function HomePage({ heroSlides, categories, featured, latest, luxe = [], luxeFeature = null }: { heroSlides: HeroSlide[]; categories: Category[]; featured: Product[]; latest: Product[]; luxe?: Product[]; luxeFeature?: LuxeFeature | null }) {
   const { settings } = useStorefrontData();
   const { transition: onTransition, notify } = useUi();
   const { wishlist, onToggleWishlist } = useWishlistToggle();
@@ -28,7 +30,7 @@ export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }
   const [submitting, setSubmitting] = useState(false);
   const [leadError, setLeadError] = useState('');
   // The Luxe band below reuses a banner still. A video banner may have no poster, so fall back to the first banner that has a picture.
-  const luxeImage = activeSlides[2]?.desktopImage || activeSlides.find(slide => slide.desktopImage)?.desktopImage || '';
+  const luxeBand = resolveLuxeFeature(luxeFeature, luxeFallbackImage(activeSlides));
   const submitLead = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
@@ -61,7 +63,7 @@ export function HomePage({ heroSlides, categories, featured, latest, luxe = [] }
 
       <section className="product-section section-shell arrivals-section"><SectionHeading eyebrow="JUST IN, JUST RIGHT" title="New arrivals" description="Fresh proportions. New favourites waiting to happen." href="/collections/new-arrivals" onTransition={onTransition} /><ProductGrid products={latest} onToggleWishlist={onToggleWishlist} wishlist={wishlist} onTransition={onTransition} /></section>
 
-      <section className="luxe-feature"><SmartImage src={luxeImage} alt="One 2 1 Eight Luxe collection" /><div className="luxe-feature-overlay" /><div className="luxe-feature-content"><span className="eyebrow">THE PRIVATE EDIT</span><h2>ONE 2 1 EIGHT<br /><em>LUXE</em></h2><p>Elevated textures. Understated confidence.<br />A more considered kind of statement.</p><RouteLink href="/collections/one-2-1-eight-luxe" className="button button-ivory" onClick={onTransition}>ENTER THE LUXE EDIT <ArrowUpRight size={17} /></RouteLink></div><div className="luxe-feature-side">LIMITED / CURATED / ESSENTIAL</div></section>
+      {luxeBand.enabled && <LuxeFeatureBand feature={luxeBand} onTransition={onTransition} />}
 
       <section className="service-section section-shell" id="service"><SectionHeading eyebrow="THE STANDARD, BUILT IN" title="Considered from checkout to doorstep" description="The details should feel as good as the fit." /><div className="service-grid"><div className="service-card"><div className="service-icon"><Truck size={23} /></div><h3>Complimentary shipping</h3><p>Free shipping on orders over {money(settings.freeShippingThreshold)}. Clear delivery updates, from us to you.</p><span>01 / DELIVERY</span></div><div className="service-card"><div className="service-icon"><PackageCheck size={23} /></div><h3>7-day easy returns</h3><p>Try it on, find your fit. Eligible pieces can be returned within seven days of delivery.</p><span>02 / PEACE OF MIND</span></div><div className="service-card"><div className="service-icon"><CircleHelp size={23} /></div><h3>Real help, when needed</h3><p>Questions about fit, orders or bulk buying? Reach our team at {settings.contactEmail}.</p><span>03 / HERE TO HELP</span></div></div></section>
 

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { adminHeroOrderSchema, adminHeroSlideUpdateSchema } from '@/lib/api/schemas';
 import { requireAdmin } from '@/lib/backend/auth';
 import {
-  BANNER_BUCKET, HttpError, bannerVideoUrl, db, isStoragePath, isUuid, json, route, removeBannerVideos, removeStorageObjects, storedBannerVideo, storedImage,
+  BANNER_BUCKET, HttpError, bannerVideoUrl, db, isStoragePath, isUuid, json, route, removeBannerVideos, removeStorageObjects, storedBannerVideo, storedImage, storedLuxeImage,
 } from '@/lib/backend/core';
 import type { Row } from '@/lib/backend/data';
 import { heroDto } from '@/lib/backend/routes/storefront';
@@ -48,6 +48,10 @@ export async function releaseUnusedMedia(candidates: { images: string[]; videos:
   if (error) { console.error('[backend] banner media check failed; nothing was deleted', error.code); return; }
   const used = new Set<string>();
   for (const row of (data ?? []) as Row[]) for (const path of [...mediaOf(row).images, ...mediaOf(row).videos]) used.add(path);
+  // The homepage Luxe band may use a still too; if that cannot be determined, nothing is deleted.
+  const luxe = await storedLuxeImage();
+  if (!luxe.ok) { console.error('[backend] luxe image check failed; nothing was deleted'); return; }
+  if (luxe.path) used.add(luxe.path);
   await removeStorageObjects(candidates.images.filter(path => !used.has(path)));
   await removeBannerVideos(candidates.videos.filter(path => !used.has(path)));
 }

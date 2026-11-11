@@ -203,6 +203,17 @@ export async function removeBannerVideos(paths: string[]) {
   const { error } = await db().storage.from(BANNER_BUCKET).remove(targets);
   if (error) console.error('[backend] banner video cleanup failed', error.message);
 }
+/**
+ * The Storage path the homepage Luxe band uses (settings column from migration 0011). Every "is this file still used?" check must include it.
+ * `ok: false` means the answer is unknown, which callers treat as "still used" so nothing is deleted on doubt. A database that has not
+ * been migrated yet has no such column, which is a definite "not used".
+ */
+export async function storedLuxeImage(): Promise<{ path: string; ok: boolean }> {
+  const { data, error } = await db().from('store_settings').select('luxe_feature').eq('id', 1).maybeSingle();
+  if (error) return { path: '', ok: /luxe_feature/.test(error.message ?? '') };
+  const image = (data as { luxe_feature?: { image?: unknown } | null } | null)?.luxe_feature?.image;
+  return { path: typeof image === 'string' ? image : '', ok: true };
+}
 export async function removeStorageObjects(paths: string[]) {
   const targets = [...new Set(paths.filter(path => path !== '' && isStoragePath(path)))];
   if (!targets.length) return;

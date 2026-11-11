@@ -93,6 +93,7 @@ describe('frontend repositories ⇄ OpenAPI', () => {
       api.admin.content.updateHeroSlide('h1', { kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: true }),
       api.admin.content.createHeroSlide({ kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: false }), api.admin.content.deleteHeroSlide('h1'),
       api.admin.content.duplicateHeroSlide('h1'), api.admin.content.reorderHeroSlides(['h1', 'h2']), api.admin.uploads.removeBannerVideo('banners/2026/11/x.mp4'),
+      api.admin.content.getLuxeFeature(), api.admin.content.updateLuxeFeature({ enabled: true, image: '', imageAlt: 'a', eyebrow: 'e', heading: 'h', bodyLine1: '', bodyLine2: '', ctaLabel: 'Go', ctaHref: '/collections/all' }),
     ].map(swallow));
 
     expect(seen.length).toBeGreaterThan(40);

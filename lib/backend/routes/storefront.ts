@@ -10,7 +10,7 @@ import {
 } from '@/lib/backend/core';
 import {
   MAX_LINE_QUANTITY, ORDER_SELECT, PRODUCT_SELECT, applyCoupon, availability, getSettingsRow, loadOrder, orderMailData, paymentMethods, priceCart, reviewStats, selectRelated,
-  toOrder, toProducts, toSettings, limitedAvailabilityMessage, rowStockMode, type Row,
+  toLuxeFeature, toOrder, toProducts, toSettings, limitedAvailabilityMessage, rowStockMode, type Row,
 } from '@/lib/backend/data';
 import { isCancellable, presentOrders, trackingUrl } from '@/lib/backend/returns';
 import { checkOtpRequest, logOtp, noteRateLimit, noteValidationFailure, requireSameMobile } from '@/lib/backend/otp';
@@ -175,7 +175,7 @@ route('GET', '/content/storefront', async () => {
     db().from('hero_slides').select('*').eq('active', true).order('sort_order').order('id'),
     db().from('categories').select('*').eq('active', true).order('sort_order'),
   ]);
-  return { settings: toSettings(settings), heroSlides: (must(slides, 'hero') as Row[]).map(heroDto), categories: (must(categories, 'categories') as Row[]).map(categoryDto), paymentMethods: paymentMethods() };
+  return { settings: toSettings(settings), luxeFeature: toLuxeFeature(settings), heroSlides: (must(slides, 'hero') as Row[]).map(heroDto), categories: (must(categories, 'categories') as Row[]).map(categoryDto), paymentMethods: paymentMethods() };
 });
 route('GET', '/content/pages/:slug', async ({ params }) => {
   const { data } = await db().from('legal_pages').select('slug, title, body, updated_at').eq('slug', params.slug).eq('published', true).maybeSingle();

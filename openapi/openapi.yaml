@@ -660,6 +660,24 @@ paths:
       responses:
         '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/StoreSettings' } } } }
         '422': { $ref: '#/components/responses/Error' }
+  /admin/content/luxe-feature:
+    get:
+      tags: [Admin]
+      operationId: adminGetLuxeFeature
+      summary: The homepage "THE PRIVATE EDIT" band (null = built-in copy; available is false until migration 0011 is applied)
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Current configuration, content: { application/json: { schema: { $ref: '#/components/schemas/AdminLuxeFeature' } } } }
+    put:
+      tags: [Admin]
+      operationId: adminUpdateLuxeFeature
+      summary: Save the homepage "THE PRIVATE EDIT" band. A replaced or removed picture is deleted only after the save and only if nothing else uses it.
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LuxeFeature' } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/LuxeFeature' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { description: Database migration 0011 has not been applied yet, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } } }
   /admin/content/hero-slides:
     post:
       tags: [Admin]
@@ -1051,6 +1069,7 @@ components:
       type: object
       required: [settings, heroSlides, categories, paymentMethods]
       properties:
+        luxeFeature: { oneOf: [{ $ref: '#/components/schemas/LuxeFeature' }, { type: 'null' }], description: The homepage Luxe band; null or absent means the built-in copy }
         paymentMethods: { type: array, minItems: 1, items: { type: string, enum: [upi, card, cod] }, description: Online methods are listed only when a payment provider is configured }
         settings: { $ref: '#/components/schemas/StoreSettings' }
         heroSlides: { type: array, items: { $ref: '#/components/schemas/HeroSlide' }, description: Active slides only }
@@ -1496,6 +1515,26 @@ components:
       type: object
       required: [status]
       properties: { status: { type: string, enum: [new, contacted, qualified, closed] } }
+    LuxeFeature:
+      type: object
+      description: The homepage "THE PRIVATE EDIT" band. image may be empty (the band then reuses a banner still). eyebrow and the two description lines may be empty and are then not shown.
+      required: [enabled, image, imageAlt, eyebrow, heading, bodyLine1, bodyLine2, ctaLabel, ctaHref]
+      properties:
+        enabled: { type: boolean }
+        image: { $ref: '#/components/schemas/OptionalImageUrl' }
+        imageAlt: { type: string, maxLength: 160 }
+        eyebrow: { type: string, maxLength: 60 }
+        heading: { type: string, minLength: 1, maxLength: 100, description: A line break splits the plain first line from the italic accent line }
+        bodyLine1: { type: string, maxLength: 120 }
+        bodyLine2: { type: string, maxLength: 120 }
+        ctaLabel: { type: string, minLength: 1, maxLength: 40 }
+        ctaHref: { type: string, maxLength: 512, pattern: '^/(?!/)\S*$', description: Site-relative path }
+    AdminLuxeFeature:
+      type: object
+      required: [luxeFeature, available]
+      properties:
+        luxeFeature: { oneOf: [{ $ref: '#/components/schemas/LuxeFeature' }, { type: 'null' }] }
+        available: { type: boolean, description: False until database migration 0011 has been applied }
     AdminContent:
       type: object
       required: [settings, heroSlides]

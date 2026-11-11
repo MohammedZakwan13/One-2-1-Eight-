@@ -203,9 +203,30 @@ export const heroSlideSchema = z.object({
 });
 export type HeroSlide = z.infer<typeof heroSlideSchema>;
 
+/**
+ * The editable homepage "THE PRIVATE EDIT" band. `image` may be empty (the band then reuses a banner still). The call-to-action needs a label
+ * and a site-relative destination; the eyebrow and the two description lines may be left empty and are then simply not shown.
+ */
+export const luxeFeatureSchema = z.object({
+  enabled: z.boolean(),
+  image: optionalSafeUrl,
+  imageAlt: z.string().trim().max(160),
+  eyebrow: z.string().trim().max(60),
+  heading: z.string().trim().min(1, 'Add a heading').max(100),
+  bodyLine1: z.string().trim().max(120),
+  bodyLine2: z.string().trim().max(120),
+  ctaLabel: z.string().trim().min(1, 'Add a button label').max(40),
+  ctaHref: internalPath,
+});
+export type LuxeFeature = z.infer<typeof luxeFeatureSchema>;
+/** Admin view: `available` is false until database migration 0011 has been applied (saving is then refused with a clear message). */
+export const adminLuxeFeatureSchema = z.object({ luxeFeature: luxeFeatureSchema.nullable(), available: z.boolean() });
+
 export const storefrontContentSchema = z.object({
   settings: storeSettingsSchema,
   heroSlides: z.array(heroSlideSchema),
+  /** null / absent = the built-in copy. */
+  luxeFeature: luxeFeatureSchema.nullish(),
   categories: z.array(categorySchema),
   /** Methods the checkout may offer; online methods appear only when a payment provider is configured. */
   paymentMethods: z.array(paymentMethodSchema).min(1),
