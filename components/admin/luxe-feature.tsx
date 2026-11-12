@@ -67,7 +67,7 @@ export function LuxeFeatureEditor({ fallbackImage }: { fallbackImage: string }) 
 
     <div className="hb-section"><h4><b>1</b> Picture</h4>
       <ImageUploader label="Section image" max={1} images={draft.image ? [draft.image] : []} onChange={images => set({ image: images[0] ?? '' })} onBusyChange={setUploading} session={session}
-        hint="Wide landscape works best (it is cropped to fill the band). JPEG, PNG, WebP or AVIF. Removing it makes the band reuse your homepage banner picture." />
+        hint="Wide landscape works best (it is cropped to fill the band). JPEG, PNG, WebP or AVIF · up to 10 MB (larger images auto-optimized). Removing it makes the band reuse your homepage banner picture." />
       <label>Image description (alt text) <small>Describes the picture for screen readers.</small><input maxLength={160} value={draft.imageAlt} onChange={event => set({ imageAlt: event.target.value })} /></label>
     </div>
 

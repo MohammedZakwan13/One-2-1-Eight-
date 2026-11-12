@@ -94,7 +94,7 @@ function MediaSlot({ device, draft, set, track, session }: { device: Device; dra
       ? <ImageUploader label={`${Label} image`} max={1} images={draft[imageKey] ? [draft[imageKey]] : []} onChange={setImage} onBusyChange={track(`${device}-image`)} session={session} />
       : <>
         <HeroVideoUploader label={`${Label} video`} value={draft[videoKey]} onChange={setVideo} disabled={off} onBusyChange={track(`${device}-video`)} session={session} />
-        <ImageUploader label={`${Label} poster image (recommended)`} max={1} images={draft[imageKey] ? [draft[imageKey]] : []} onChange={setImage} onBusyChange={track(`${device}-poster`)} session={session} hint="Shown while the video loads, when it cannot play, and for visitors who prefer reduced motion." />
+        <ImageUploader label={`${Label} poster image (recommended)`} max={1} images={draft[imageKey] ? [draft[imageKey]] : []} onChange={setImage} onBusyChange={track(`${device}-poster`)} session={session} hint="Shown while the video loads, when it cannot play, and for visitors who prefer reduced motion. Up to 10 MB (larger images auto-optimized)." />
       </>}
   </fieldset>;
 }

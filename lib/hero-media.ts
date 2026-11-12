@@ -3,7 +3,7 @@ import { parseMp4, parseWebm } from './video-structure';
 /**
  * Shared (browser + server) rules for hero banner media. Pure: no I/O, no path aliases.
  *
- * Images keep using the existing `media` bucket and the existing 4 MB image limit (lib/upload-limits.ts).
+ * Images keep using the existing `media` bucket and the 10 MB image limit (lib/upload-limits.ts).
  * Videos use their own `banner-media` bucket (migration 0010) and the cap below. The cap is a deliberate product limit chosen for
  * a homepage background video, not a provider maximum; it is enforced three times: in the browser, in the upload route and by the
  * bucket's own `file_size_limit`.

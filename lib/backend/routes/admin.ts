@@ -20,6 +20,7 @@ import { sendOrderEmail, sendReturnEmail } from '@/lib/backend/integrations';
 import { presentOrders, toReturnDto, trackingUrl } from '@/lib/backend/returns';
 import { cleanupBannerVideos } from '@/lib/backend/routes/hero-banners';
 import { heroDto } from '@/lib/backend/routes/storefront';
+import { classifyStorageError, type StorageFailure } from '@/lib/backend/storage-errors';
 import { getServerEnv } from '@/lib/env';
 
 /**
@@ -475,7 +476,11 @@ route('POST', '/admin/uploads', async ctx => {
   if (!type) throw new HttpError(422, 'invalid_image', 'Only JPEG, PNG, WebP or AVIF images are allowed.');
   const path = `uploads/${new Date().getUTCFullYear()}/${String(new Date().getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}.${type.ext}`;
   const { error } = await db().storage.from(MEDIA_BUCKET).upload(path, bytes, { contentType: type.mime, cacheControl: '31536000', upsert: false });
-  if (error) { console.error('[backend] upload', error.message); throw new HttpError(502, 'upload_failed', 'The image could not be stored. Please try again.'); }
+  if (error) {
+    const failure = classifyStorageError(error as StorageFailure, { bucket: MEDIA_BUCKET, limitLabel: MAX_IMAGE_UPLOAD_LABEL });
+    console.error('[backend] upload', failure.log);
+    throw new HttpError(failure.status, failure.code, failure.message);
+  }
   return json({ path, url: imageUrl(path) }, 201);
 });
 

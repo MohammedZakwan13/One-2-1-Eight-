@@ -13091,3 +13091,18 @@ button {
 .lf-preview .button { pointer-events: none; }
 .lf-preview.is-hidden { opacity: .45; filter: grayscale(.6); }
 .lf-editor .hb-editor-head { align-items: flex-start; gap: 16px; }
+
+/* Image uploader optimization feedback */
+.image-uploader-info {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  color: #312e81;
+  background: #eef2ff;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.image-uploader-info p {
+  margin: 0;
+}

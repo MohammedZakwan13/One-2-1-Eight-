@@ -250,10 +250,10 @@ describe('image uploads (existing endpoint, used for desktop, mobile and poster 
       expect(String(r.body.path)).toMatch(/^uploads\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.png$/);
     }
   });
-  it('rejects a GIF, an image claiming to be another type, and an image over 4 MB', async () => {
+  it('rejects a GIF, an image claiming to be another type, and an image over 10 MB', async () => {
     expect((await upload('/admin/uploads', GIF, 'a.gif', 'image/gif')).status).toBe(422);
     expect((await upload('/admin/uploads', GIF, 'a.png', 'image/png')).status).toBe(422);
-    const big = new Uint8Array(4 * 1024 * 1024 + 1); big.set(PNG);
+    const big = new Uint8Array(10 * 1024 * 1024 + 1); big.set(PNG);
     expect((await upload('/admin/uploads', big, 'big.png', 'image/png')).status).toBe(413);
   });
 });

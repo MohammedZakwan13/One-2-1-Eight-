@@ -831,7 +831,7 @@ paths:
       tags: [Admin]
       operationId: adminUploadImage
       summary: Upload one image to Supabase Storage
-      description: "multipart/form-data with a `file` field. JPEG, PNG, WebP or AVIF, max 4 MB (temporary: Vercel rejects request bodies above about 4.5 MB; larger files get 413 file_too_large). The type is verified from the file's bytes, not its name or declared MIME type. Returns the stable storage path and the public URL."
+      description: "multipart/form-data with a `file` field. JPEG, PNG, WebP or AVIF, max 10 MB (files up to 50 MB are automatically compressed in the browser before upload; files above 10 MB get 413 file_too_large). The type is verified from the file's bytes, not its name or declared MIME type. Returns the stable storage path and the public URL."
       security: [{ adminSession: [], csrf: [] }]
       requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
       responses:
