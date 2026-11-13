@@ -182,7 +182,7 @@ describe('the rest of the product page is untouched', () => {
     expect(page).toContain('className="gallery-mobile-dots"');
     expect(page).toContain('aria-label="Save product"');
     expect(page).toContain('className="gallery-image-number"');
-    expect(page).toContain('<SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager />'); // main image: same loading priority
+    expect(page).toContain('<SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager onNaturalSize={onImageSize} />'); // main image: same loading priority (eager); it now also reports its size so the box can hug the picture
   });
   it('there is no zoom or lightbox in the gallery (none existed), and none was added', () => {
     expect(page).not.toMatch(/lightbox|zoom/i);

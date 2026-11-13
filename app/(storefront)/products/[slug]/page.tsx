@@ -13,13 +13,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) return { title: 'Product not found', robots: { index: false } };
-  const { settings } = await getStorefront();
+  const { settings, heroSlides } = await getStorefront();
+  const image = product.images[0] || heroSlides[0]?.desktopImage || ''; // a product without a photo still gets a branded preview image
   const description = `${product.description} Shop ${product.name} online from ${settings.brandName}.`.trim().slice(0, 300);
   const shareDescription = product.description.trim() || description; // a product without a written description still shares with a useful line
   return {
     title: product.name, description, alternates: { canonical: `/products/${product.slug}` },
-    openGraph: { type: 'website', siteName: settings.brandName, title: `${product.name} | ${settings.brandName}`, description: shareDescription, url: `/products/${product.slug}`, images: product.images.slice(0, 1).map(url => ({ url, alt: product.name })) },
-    twitter: { card: 'summary_large_image', title: `${product.name} | ${settings.brandName}`, description: shareDescription, images: product.images.slice(0, 1) },
+    openGraph: { type: 'website', siteName: settings.brandName, title: `${product.name} | ${settings.brandName}`, description: shareDescription, url: `/products/${product.slug}`, ...(image ? { images: [{ url: image, alt: product.name }] } : {}) },
+    twitter: { card: 'summary_large_image', title: `${product.name} | ${settings.brandName}`, description: shareDescription, ...(image ? { images: [image] } : {}) },
+    other: { 'product:price:amount': String(product.price), 'product:price:currency': 'INR' },
   };
 }
 

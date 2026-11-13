@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { effectiveStockMode, stockLine } from '@/lib/inventory';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
@@ -16,7 +16,7 @@ import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
 import { useWishlistToggle } from '@/lib/hooks/use-wishlist-toggle';
 import { ProductShare } from '@/components/storefront/product-share';
-import { productShareUrl } from '@/lib/product-share';
+import { productSharePayload } from '@/lib/product-share';
 import { useCart } from '@/lib/hooks/use-cart';
 import { api } from '@/lib/api/client';
 import { errorMessage, isUnauthorized } from '@/lib/api/errors';
@@ -33,6 +33,11 @@ export function ProductDetailPage({ product, related, initialReviews, canonicalU
   const { wishlist, onToggleWishlist } = useWishlistToggle();
   const router = useRouter();
   const { addItem } = useCart();
+  // The gallery box takes the picture's own aspect ratio (clamped), so the floating wishlist/share controls sit on the picture's corner.
+  const [imageRatio, setImageRatio] = useState(1);
+  const onImageSize = useCallback((width: number, height: number) => { if (width > 0 && height > 0) setImageRatio(Math.min(2, Math.max(0.5, Number((width / height).toFixed(4))))); }, []);
+  // Everything the share menu sends comes from this product's own data; the URL is the canonical production URL built on the server (or by the same rule here).
+  const sharePayload = productSharePayload({ siteUrl: canonicalUrl ? new URL(canonicalUrl).origin : undefined, slug: product.slug, name: product.name, price: product.price, description: product.description, image: product.images[0], brandName: settings.brandName });
   const queryClient = useQueryClient();
   const reviewsQuery = useQuery({ queryKey: ['reviews', product.slug], queryFn: ({ signal }) => api.reviews.list(product.slug, signal), initialData: initialReviews ?? EMPTY_REVIEWS, initialDataUpdatedAt: initialReviews ? Date.now() : 0, staleTime: 30_000 });
   const summary = reviewsQuery.data.summary;
@@ -135,11 +140,13 @@ export function ProductDetailPage({ product, related, initialReviews, canonicalU
     <div className="breadcrumbs product-breadcrumbs"><RouteLink href="/" onClick={onTransition}>Home</RouteLink><span>/</span><RouteLink href={`/collections/${slugify(product.category)}`} onClick={onTransition}>{product.category}</RouteLink><span>/</span><span>{product.name}</span></div>
     <div className="product-layout">
       <section className={`product-gallery ${hasMultipleImages ? 'has-thumbnails' : 'single-image'}`} aria-label="Product images" {...gallery.sectionProps}>
-        <div className="gallery-main" {...gallery.mainProps}>
-          <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager />
+        <div className="gallery-main" {...gallery.mainProps} style={{ '--gallery-ratio': imageRatio } as React.CSSProperties}>
+          <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager onNaturalSize={onImageSize} />
           {hasMultipleImages && <span className="gallery-image-number" aria-live="polite">{counter.current} <i>/</i> {counter.total}</span>}
-          <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={22} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
-          <ProductShare url={canonicalUrl ?? productShareUrl(undefined, product.slug)} productName={product.name} brandName={settings.brandName} />
+          <div className="gallery-actions">
+            <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={22} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+            <ProductShare payload={sharePayload} />
+          </div>
           {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-prev" onClick={() => gallery.go(-1)} aria-label="Previous product image"><ChevronLeft size={18} aria-hidden="true" /></button>}
           {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-next" onClick={() => gallery.go(1)} aria-label="Next product image"><ChevronRight size={18} aria-hidden="true" /></button>}
         </div>
