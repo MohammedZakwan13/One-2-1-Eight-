@@ -93,7 +93,7 @@ describe('frontend repositories ⇄ OpenAPI', () => {
       api.admin.content.updateHeroSlide('h1', { kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: true }),
       api.admin.content.createHeroSlide({ kicker: '', title: '', body: '', desktopImage: '/a', mobileImage: '/a', cta: '', href: '/', active: false }), api.admin.content.deleteHeroSlide('h1'),
       api.admin.content.duplicateHeroSlide('h1'), api.admin.content.reorderHeroSlides(['h1', 'h2']), api.admin.uploads.removeBannerVideo('banners/2026/11/x.mp4'),
-      api.admin.content.getLuxeFeature(), api.admin.content.updateLuxeFeature({ enabled: true, image: '', imageAlt: 'a', eyebrow: 'e', heading: 'h', bodyLine1: '', bodyLine2: '', ctaLabel: 'Go', ctaHref: '/collections/all' }),
+      api.admin.uploads.bannerVideoJob('00000000-0000-4000-8000-000000000000'), api.admin.uploads.startBannerVideoUpload('a.mov', 10), api.admin.uploads.bannerVideoUploadState('00000000-0000-4000-8000-000000000000'), api.admin.uploads.completeBannerVideoUpload('00000000-0000-4000-8000-000000000000'), api.admin.uploads.cancelBannerVideoUpload('00000000-0000-4000-8000-000000000000'), api.admin.content.getLuxeFeature(), api.admin.content.updateLuxeFeature({ enabled: true, image: '', imageAlt: 'a', eyebrow: 'e', heading: 'h', bodyLine1: '', bodyLine2: '', ctaLabel: 'Go', ctaHref: '/collections/all' }),
     ].map(swallow));
 
     expect(seen.length).toBeGreaterThan(40);
@@ -106,7 +106,8 @@ describe('frontend repositories ⇄ OpenAPI', () => {
     // every documented, frontend-facing operation is reachable through a repository (except probes and the multipart upload, which use their own transport)
     const used = new Set(seen.map(request => `${request.method} ${request.path.split('?')[0]}`));
     const unused = operations.filter(item => {
-      if (['/health', '/ready', '/csrf-token', '/admin/uploads', '/admin/uploads/banner-video'].includes(item.route) && (item.method === 'get' || item.route.startsWith('/admin/uploads') && item.method === 'post')) return false; // used by the proxy / browser transport directly
+      if (['/health', '/ready', '/csrf-token', '/admin/uploads', '/admin/uploads/banner-video'].includes(item.route) && (item.method === 'get' || item.route.startsWith('/admin/uploads') && item.method === 'post')) return false;
+      if (item.route === '/admin/uploads/banner-video/sessions/{id}/chunk') return false; // binary chunks use fetch, not the JSON caller; // used by the proxy / browser transport directly
       if (item.route.endsWith('.csv')) return false; // plain download links
       return ![...used].some(key => key.startsWith(`${item.method.toUpperCase()} `) && templateRegex(item.route).test(key.slice(key.indexOf(' ') + 1)));
     }).map(item => item.key);

@@ -577,7 +577,37 @@ export const adminHeroSlideUpdateSchema = heroSlideSchema.omit({ id: true, sortO
 export type HeroSlideInput = z.input<typeof adminHeroSlideUpdateSchema>;
 export const adminHeroOrderSchema = z.object({ ids: z.array(z.uuid()).min(1).max(500) });
 export const adminHeroOrderResultSchema = z.object({ items: z.array(heroSlideSchema) });
-export const heroVideoUploadResponseSchema = z.object({ path: z.string(), url: safeUrl, warnings: z.array(z.string()).default([]) });
+/** How a banner video is optimised. `original` (default) keeps browser-compatible files untouched; the other two compress automatically. */
+export const heroVideoModeSchema = z.enum(['original', 'balanced', 'small']);
+export type HeroVideoMode = z.infer<typeof heroVideoModeSchema>;
+/** A video that is already stored and ready. The size fields are present for new uploads; `converted` is false when the original file was kept as it is. */
+export const heroVideoUploadResponseSchema = z.object({
+  path: z.string(), url: safeUrl, warnings: z.array(z.string()).default([]),
+  originalBytes: z.number().int().nonnegative().optional(), processedBytes: z.number().int().nonnegative().optional(), converted: z.boolean().optional(),
+});
+/** 202: the upload was received and is being processed; poll the job until it is ready or failed. */
+export const heroVideoAcceptedSchema = z.object({ jobId: z.string(), status: z.enum(['queued', 'processing']), stage: z.string(), originalBytes: z.number().int().nonnegative(), originalName: z.string() });
+export const heroVideoUploadResultSchema = z.union([heroVideoUploadResponseSchema, heroVideoAcceptedSchema]);
+const videoFactsSchema = z.object({ bytes: z.number(), width: z.number(), height: z.number(), fps: z.number(), videoCodec: z.string(), audioCodec: z.string().nullable() });
+/** What happened to the file, for the admin screen. Every flag describes the real outcome. */
+export const heroVideoInfoSchema = z.object({
+  mode: heroVideoModeSchema, action: z.enum(['preserved', 'remuxed', 'reencoded']), preserved: z.boolean(), remuxed: z.boolean(), reencoded: z.boolean(), resized: z.boolean(), summary: z.string(), attempts: z.number(),
+  original: videoFactsSchema.extend({ container: z.string(), durationSeconds: z.number() }), final: videoFactsSchema.extend({ container: z.enum(['mp4', 'webm']) }),
+  notes: z.array(z.object({ level: z.enum(['info', 'warning']), text: z.string() })),
+});
+export type HeroVideoInfo = z.infer<typeof heroVideoInfoSchema>;
+export const heroVideoJobSchema = z.object({
+  id: z.string(), status: z.enum(['queued', 'processing', 'ready', 'failed']), stage: z.enum(['queued', 'analyzing', 'converting', 'compressing', 'uploading', 'saving']), percent: z.number().min(0).max(100), mode: heroVideoModeSchema.default('original'), ahead: z.number().int().nonnegative().optional(),
+  originalName: z.string(), originalBytes: z.number().int().nonnegative(), processedBytes: z.number().int().nonnegative().optional(),
+  path: z.string().optional(), url: safeUrl.optional(), width: z.number().optional(), height: z.number().optional(), durationSeconds: z.number().optional(), converted: z.boolean().optional(),
+  info: heroVideoInfoSchema.optional(), processingMs: z.number().optional(),
+  warnings: z.array(z.string()), error: z.object({ code: z.string(), message: z.string() }).optional(), createdAt: z.number(), updatedAt: z.number(),
+});
+export type HeroVideoJob = z.infer<typeof heroVideoJobSchema>;
+/** Chunked upload: start (or resume) a session for one file; the server answers with where to continue from. */
+export const heroVideoSessionRequestSchema = z.object({ name: z.string().trim().min(1).max(200), size: z.number().int().positive(), mode: heroVideoModeSchema.default('original'), key: z.string().trim().max(64).optional() });
+export const heroVideoSessionSchema = z.object({ uploadId: z.string(), size: z.number().int().positive(), received: z.number().int().nonnegative(), chunkBytes: z.number().int().positive(), mode: heroVideoModeSchema.default('original') });
+export type HeroVideoSession = z.infer<typeof heroVideoSessionSchema>;
 
 export const dashboardSummarySchema = z.object({
   orderCount: z.number().int().nonnegative(),

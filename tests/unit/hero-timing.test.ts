@@ -290,7 +290,7 @@ describe('admin guidance', () => {
     expect(source).toContain('videoDurationAdvice(lengths[value])');
     expect(source).toContain('onLoadedMetadata');
     expect(source).toContain('videoFileProblem(file)');
-    expect(source).toContain('inspectHeroVideo(');
+    expect(source).toContain('uploadBannerVideo(file')
   });
 });
 

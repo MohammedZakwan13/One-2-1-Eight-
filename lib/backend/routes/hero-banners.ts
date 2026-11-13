@@ -1,14 +1,18 @@
 import 'server-only';
-import { randomUUID } from 'node:crypto';
-import { adminHeroOrderSchema, adminHeroSlideUpdateSchema } from '@/lib/api/schemas';
+import { adminHeroOrderSchema, adminHeroSlideUpdateSchema, heroVideoSessionRequestSchema } from '@/lib/api/schemas';
 import { requireAdmin } from '@/lib/backend/auth';
 import {
-  BANNER_BUCKET, HttpError, bannerVideoUrl, db, isStoragePath, isUuid, json, route, removeBannerVideos, removeStorageObjects, storedBannerVideo, storedImage, storedLuxeImage,
+  BANNER_BUCKET, HttpError, db, isStoragePath, isUuid, json, route, removeBannerVideos, removeStorageObjects, storedBannerVideo, storedImage, storedLuxeImage,
 } from '@/lib/backend/core';
 import type { Row } from '@/lib/backend/data';
 import { heroDto } from '@/lib/backend/routes/storefront';
-import { classifyStorageError, type StorageFailure } from '@/lib/backend/storage-errors';
-import { HERO_VIDEO_MAX_BYTES, HERO_VIDEO_MAX_LABEL, inspectHeroVideo } from '@/lib/hero-media';
+import { storeBannerVideo } from '@/lib/backend/banner-storage';
+import { enqueueVideoFile, enqueueVideoJob, getVideoJob } from '@/lib/backend/video-jobs';
+import { abortUploadSession, createUploadSession, getUploadSession, takeCompletedUpload, writeChunk } from '@/lib/backend/video-uploads';
+import { VideoError, requireFfmpeg, videoConfig } from '@/lib/backend/video-transcode';
+import { rm } from 'node:fs/promises';
+import { DEFAULT_OPTIMIZE_MODE, MB, isOptimizeMode, type OptimizeMode } from '@/lib/video-plan';
+import { inspectHeroVideo } from '@/lib/hero-media';
 
 /**
  * Hero banner management (Admin → Homepage & banners). Any number of banners: there is no count limit here or in the database.
@@ -145,40 +149,83 @@ route('POST', '/admin/content/hero-slides/:id/duplicate', async ctx => {
 
 const VIDEO_PATH = /^banners\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.(mp4|webm)$/;
 
+/** Media processing is required: a missing FFmpeg is reported as exactly that, never as an old size or format rule. */
+const ensureMedia = async () => {
+  try { await requireFfmpeg(); } catch (error) {
+    if (error instanceof VideoError) throw new HttpError(503, 'media_processing_unavailable', error.message);
+    throw error;
+  }
+};
+const accepted = (job: { id: string; status: string; stage: string; originalBytes: number; originalName: string }) =>
+  json({ jobId: job.id, status: job.status, stage: job.stage, originalBytes: job.originalBytes, originalName: job.originalName }, 202);
+
+/**
+ * Single-request upload. The admin screen does NOT use it (it uses the chunked sessions below, which have no size cap); it remains for API
+ * clients and is limited only by what one request can carry. Everything goes through the same conversion queue.
+ */
+const SINGLE_REQUEST_MAX = 95 * 1024 * 1024;
 route('POST', '/admin/uploads/banner-video', async ctx => {
   await requireAdmin(ctx, 'content');
-  const tooLarge = () => new HttpError(413, 'file_too_large', `Videos must be ${HERO_VIDEO_MAX_LABEL} or smaller. Compress it or shorten the clip first.`);
-  if (Number(ctx.req.headers.get('content-length') ?? 0) > HERO_VIDEO_MAX_BYTES + 64 * 1024) throw tooLarge();
+  await ensureMedia();
+  const tooLarge = () => new HttpError(413, 'file_too_large', `A single request can carry at most ${MB(SINGLE_REQUEST_MAX)} (proxy and memory limits). Use the chunked upload (/admin/uploads/banner-video/sessions), which the admin screen uses, for larger videos.`);
+  if (Number(ctx.req.headers.get('content-length') ?? 0) > SINGLE_REQUEST_MAX + 64 * 1024) throw tooLarge();
   let form: FormData;
   try { form = await ctx.req.formData(); } catch { throw new HttpError(400, 'invalid_upload', 'Send the video as multipart form data in a "file" field.'); }
   const file = form.get('file');
   if (!(file instanceof File)) throw new HttpError(400, 'invalid_upload', 'Send the video as multipart form data in a "file" field.');
   if (file.size === 0) throw new HttpError(422, 'invalid_video', 'That file is empty.');
-  if (file.size > HERO_VIDEO_MAX_BYTES) throw tooLarge();
+  if (file.size > SINGLE_REQUEST_MAX) throw tooLarge();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const verdict = inspectHeroVideo(bytes);
-  if (!verdict.ok) {
-    const code = verdict.error.reason === 'unrecognised' ? 'invalid_video' : verdict.error.reason;
-    throw new HttpError(422, code, verdict.error.message);
+  // A compatible MP4 / WebM is stored exactly as it is (original quality) when the optimisation mode is the default and it fits the output safeguard.
+  const mode = isOptimizeMode(form.get('mode')) ? (form.get('mode') as OptimizeMode) : DEFAULT_OPTIMIZE_MODE;
+  if (mode === 'original' && verdict.ok && file.size <= videoConfig().maxOutputBytes && !verdict.video.warnings.some(w => /slow start|index/i.test(w))) {
+    const stored = await storeBannerVideo(bytes, verdict.video.ext, verdict.video.mime);
+    return json({ ...stored, warnings: verdict.video.warnings, originalBytes: file.size, processedBytes: file.size, converted: false }, 201);
   }
-  const now = new Date();
-  const path = `banners/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}.${verdict.video.ext}`;
-  // Every upload gets a brand-new path, so a failed or replaced upload can never overwrite or delete the video a banner already uses.
-  const { error } = await db().storage.from(BANNER_BUCKET).upload(path, bytes, { contentType: verdict.video.mime, cacheControl: '31536000', upsert: false });
-  if (error) {
-    const failure = classifyStorageError(error as StorageFailure, { bucket: BANNER_BUCKET, limitLabel: HERO_VIDEO_MAX_LABEL });
-    console.error('[backend] banner video upload failed', failure.log);
-    throw new HttpError(failure.status, failure.code, failure.message);
+  return accepted(await enqueueVideoJob(bytes, file.name, mode));
+});
+
+// ── chunked, resumable uploads (no cap on the source size; see lib/backend/video-uploads.ts) ──
+route('POST', '/admin/uploads/banner-video/sessions', async ctx => {
+  const admin = await requireAdmin(ctx, 'content');
+  await ensureMedia();
+  const input = await ctx.body(heroVideoSessionRequestSchema);
+  return json(await createUploadSession(admin.id, input.name, input.size, input.mode, input.key), 201);
+});
+route('GET', '/admin/uploads/banner-video/sessions/:id', async ctx => {
+  const admin = await requireAdmin(ctx, 'content');
+  return json(getUploadSession(ctx.params.id, admin.id), 200);
+});
+route('PUT', '/admin/uploads/banner-video/sessions/:id/chunk', async ctx => {
+  const admin = await requireAdmin(ctx, 'content');
+  const offset = Number(ctx.url.searchParams.get('offset'));
+  return json(await writeChunk(ctx.params.id, admin.id, offset, new Uint8Array(await ctx.req.arrayBuffer())), 200);
+});
+route('POST', '/admin/uploads/banner-video/sessions/:id/complete', async ctx => {
+  const admin = await requireAdmin(ctx, 'content');
+  await ensureMedia();
+  const done = await takeCompletedUpload(ctx.params.id, admin.id);
+  try {
+    const job = await enqueueVideoFile(done.file, done.name, done.size, done.mode);
+    await rm(done.dir, { recursive: true, force: true }).catch(() => undefined);
+    return accepted(job);
+  } catch (error) {
+    await rm(done.dir, { recursive: true, force: true }).catch(() => undefined); // never leave the finished upload behind
+    throw error;
   }
-  const url = bannerVideoUrl(path);
-  // The URL must really be readable by visitors (the bucket has to be public). Only a definite refusal counts; a network blip does not undo a good upload.
-  const probe = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) }).catch(() => null);
-  if (probe && [401, 403, 404].includes(probe.status)) {
-    await removeBannerVideos([path]);
-    console.error('[backend] banner video stored but not publicly readable', probe.status);
-    throw new HttpError(502, 'storage_unreadable', `The video was stored but visitors cannot read it (HTTP ${probe.status}). The "${BANNER_BUCKET}" bucket must be a public bucket. The upload was undone.`);
-  }
-  return json({ path, url, warnings: verdict.video.warnings }, 201);
+});
+route('DELETE', '/admin/uploads/banner-video/sessions/:id', async ctx => {
+  const admin = await requireAdmin(ctx, 'content');
+  await abortUploadSession(ctx.params.id, admin.id);
+  return null;
+});
+
+route('GET', '/admin/uploads/banner-video/jobs/:id', async ctx => {
+  await requireAdmin(ctx, 'content');
+  const job = isUuid(ctx.params.id) ? getVideoJob(ctx.params.id) : null;
+  if (!job) throw new HttpError(404, 'not_found', 'This video job was not found. It may have expired or the server restarted: please upload the video again.');
+  return json(job, 200);
 });
 
 route('DELETE', '/admin/uploads/banner-video', async ctx => {

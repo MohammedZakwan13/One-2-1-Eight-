@@ -12,6 +12,10 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/env', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/env')>()), getServerEnv: () => h.env }));
 // The real core.db() builds its client with createClient; handing it the in-memory fake keeps core's own storage helpers on the same data.
+// Video processing is a hard requirement of every banner upload now; these tests exercise the stored-as-is path, so FFmpeg itself is not needed.
+vi.mock('@/lib/backend/video-transcode', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/backend/video-transcode')>()), ffmpegAvailable: async () => true, requireFfmpeg: async () => undefined }));
+// The disk-space guard reads the host's free space; tests must not depend on it.
+vi.mock('node:fs/promises', async importOriginal => ({ ...(await importOriginal<typeof import('node:fs/promises')>()), statfs: async () => ({ bavail: 1e15, bsize: 1 }) }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.db }));
 vi.mock('@/lib/backend/auth', async importOriginal => {
   const { HttpError } = await import('@/lib/backend/core');
@@ -27,7 +31,6 @@ vi.mock('@/lib/backend/auth', async importOriginal => {
 
 import { handleBackendRequest } from '@/lib/backend';
 import { heroDto } from '@/lib/backend/routes/storefront';
-import { HERO_VIDEO_MAX_BYTES } from '@/lib/hero-media';
 
 type Slide = { id: string; title: string; active: boolean; sortOrder: number; updatedAt: string; [key: string]: unknown };
 const CSRF = 'csrf-token';
@@ -270,22 +273,18 @@ describe('video uploads', () => {
     expect([...fake().storage['banner-media'].keys()]).toHaveLength(2);
     expect(fake().storage.media.size).toBe(0);
   });
-  it('rejects by the file bytes, not the name or declared type: MKV, HEVC, a renamed image, an empty file', async () => {
-    expect((await upload('/admin/uploads/banner-video', MKV, 'a.webm', 'video/webm')).status).toBe(422);
-    const hevc = await upload('/admin/uploads/banner-video', HEVC_MP4, 'iphone.mp4', 'video/mp4');
-    expect(hevc.status).toBe(422);
-    expect((hevc.body.error as { code: string }).code).toBe('unsupported_codec');
-    expect((await upload('/admin/uploads/banner-video', PNG, 'fake.mp4', 'video/mp4')).status).toBe(422);
+  it('MKV, HEVC, QuickTime and even a renamed image are no longer refused up front: they are queued for conversion and judged by FFprobe; only an empty file is refused', async () => {
+    for (const [bytes, name, type] of [[MKV, 'a.webm', 'video/webm'], [HEVC_MP4, 'iphone.mp4', 'video/mp4'], [PNG, 'fake.mp4', 'video/mp4']] as const) {
+      const r = await upload('/admin/uploads/banner-video', bytes, name, type);
+      expect(r.status).toBe(202);
+      expect(r.body.jobId).toBeTruthy();
+    }
     expect((await upload('/admin/uploads/banner-video', new Uint8Array(0), 'empty.mp4', 'video/mp4')).status).toBe(422);
-    expect(fake().storage['banner-media'].size).toBe(0);
+    expect(fake().storage['banner-media'].size).toBe(0); // nothing is stored until a processed file is verified
   });
-  it('enforces the size cap from the real file size and from the declared length', async () => {
-    const big = new Uint8Array(HERO_VIDEO_MAX_BYTES + 1); big.set(MP4);
-    expect((await upload('/admin/uploads/banner-video', big, 'big.mp4', 'video/mp4')).status).toBe(413);
-    const declared = await upload('/admin/uploads/banner-video', MP4, 'a.mp4', 'video/mp4', { 'content-length': String(HERO_VIDEO_MAX_BYTES + 1024 * 1024) });
-    expect(declared.status).toBe(413);
-    const exactly = new Uint8Array(HERO_VIDEO_MAX_BYTES); exactly.set(MP4);
-    expect((await upload('/admin/uploads/banner-video', exactly, 'edge.mp4', 'video/mp4')).status).toBe(201);
+  it('has no source-size cap: a 20 MB original is accepted for conversion (the 12 MB limit applies to the processed video)', async () => {
+    const r = await upload('/admin/uploads/banner-video', new Uint8Array(20 * 1024 * 1024).fill(3), 'big.mp4', 'video/mp4');
+    expect(r.status).toBe(202);
   });
   it('flags an MP4 whose index is at the end of the file (slow start) without rejecting it', async () => {
     const slow = await upload('/admin/uploads/banner-video', mp4({ moovFirst: false }), 'slow.mp4', 'video/mp4');
@@ -305,53 +304,12 @@ describe('video uploads', () => {
 });
 
 describe('video upload failures are explained, never generic, and never harm the existing video', () => {
-  const QT_HEVC = mp4({ brand: 'qt  ', video: 'hvc1' });
-  const QT_H264 = mp4({ brand: 'qt  ', video: 'avc1' });
   const savedVideo = async () => {
     const up = await upload('/admin/uploads/banner-video', MP4, 'good.mp4', 'video/mp4');
     const saved = await create({ active: true, desktopMediaType: 'video', desktopVideo: String(up.body.url), desktopImage: '/images/p.webp' });
     return { path: String(up.body.path), saved };
   };
   const errorOf = (r: { body: Record<string, unknown> }) => r.body.error as { code: string; message: string };
-
-  it('a QuickTime (.mov) file named .MP4 is refused as a container, with the reason and how to fix it (HEVC iPhone files get their own explanation)', async () => {
-    const hevc = await upload('/admin/uploads/banner-video', QT_HEVC, 'iphone-clip.MP4', 'video/mp4');
-    expect(hevc.status).toBe(422);
-    expect(errorOf(hevc).code).toBe('unsupported_container');
-    expect(errorOf(hevc).message).toMatch(/QuickTime[\s\S]*HEVC[\s\S]*named \.MP4[\s\S]*ffmpeg/);
-    const h264 = await upload('/admin/uploads/banner-video', QT_H264, 'clip.mp4', 'video/mp4');
-    expect(h264.status).toBe(422);
-    expect(errorOf(h264).code).toBe('unsupported_container');
-    expect(errorOf(h264).message).toMatch(/QuickTime/);
-    expect(errorOf(h264).message).not.toMatch(/HEVC/);
-    expect(fake().storage['banner-media'].size).toBe(0);
-  });
-
-  it('keeps the refusals apart: container, codec, not-a-video and size', async () => {
-    const code = async (bytes: Uint8Array) => errorOf(await upload('/admin/uploads/banner-video', bytes, 'x.mp4', 'video/mp4')).code;
-    expect(await code(QT_HEVC)).toBe('unsupported_container');
-    expect(await code(MKV)).toBe('unsupported_container');
-    expect(await code(HEVC_MP4)).toBe('unsupported_codec');
-    expect(await code(PNG)).toBe('invalid_video');
-    const big = new Uint8Array(HERO_VIDEO_MAX_BYTES + 1); big.set(MP4);
-    expect(await code(big)).toBe('file_too_large');
-  });
-
-  it.each([
-    ['the bucket does not exist', { message: 'Bucket not found', statusCode: '404' }, 503, 'migration_required', /bucket "banner-media" does not exist/],
-    ['the bucket does not exist (older wording)', { message: 'The related resource does not exist', status: 404 }, 503, 'migration_required', /migration 0010/],
-    ['Supabase refuses the size', { message: 'The object exceeded the maximum allowed size', statusCode: '413' }, 413, 'file_too_large', /global upload limit/],
-    ['the bucket refuses the file type', { message: 'mime type video/mp4 is not supported', statusCode: '415' }, 422, 'unsupported_type', /video\/mp4 and video\/webm/],
-    ['the server credentials are rejected', { message: 'Invalid JWT', statusCode: '403' }, 502, 'storage_unauthorized', /SUPABASE_SERVICE_ROLE_KEY/],
-    ['Supabase cannot be reached', { message: 'fetch failed', name: 'StorageUnknownError' }, 503, 'storage_unreachable', /network or DNS/],
-    ['anything else shows what Storage actually said', { message: 'Internal server error while writing', statusCode: '500' }, 502, 'upload_failed', /Storage said: “Internal server error while writing” \(HTTP 500\)/],
-  ])('Storage failure: %s', async (_name, failure, status, code, message) => {
-    fake().uploadFailure = failure;
-    const r = await upload('/admin/uploads/banner-video', MP4, 'a.mp4', 'video/mp4');
-    expect(r.status).toBe(status);
-    expect(errorOf(r).code).toBe(code);
-    expect(errorOf(r).message).toMatch(message);
-  });
 
   it('never prints a token or key that appears in a Storage error', async () => {
     // Fake secrets, assembled at run time so no secret-shaped text is stored in the repository.
@@ -414,17 +372,24 @@ describe('video upload failures are explained, never generic, and never harm the
     expect(fake().storage['banner-media'].size).toBe(1);
   });
 
-  it('the 12 MB limit is one value everywhere: browser, server, bucket and the text shown to the admin', () => {
-    expect(HERO_VIDEO_MAX_BYTES).toBe(12 * 1024 * 1024);
-    expect(readFileSync('supabase/migrations/0010_hero_banner_media.sql', 'utf8')).toContain(String(HERO_VIDEO_MAX_BYTES));
-    expect(readFileSync('lib/backend/routes/hero-banners.ts', 'utf8')).toContain('HERO_VIDEO_MAX_BYTES');
-    expect(readFileSync('components/admin/hero-video-uploader.tsx', 'utf8')).toContain('HERO_VIDEO_MAX_LABEL');
-    expect(readFileSync('lib/hero-media.ts', 'utf8')).toContain("HERO_VIDEO_MAX_LABEL = '12 MB'");
+  it('there is no fixed 12 MB output rule any more: the storage bucket limit is raised by migration 0013 and the app uses one configurable safeguard', () => {
+    const migration = readFileSync('supabase/migrations/0013_banner_video_size_limit.sql', 'utf8');
+    expect(migration).toContain('52428800');
+    expect(migration).toMatch(/update storage\.buckets/i);
+    expect(migration.replace(/--.*$/gm, '')).not.toMatch(/drop |delete |truncate /i);
+    for (const file of ['lib/backend/routes/hero-banners.ts', 'lib/backend/banner-storage.ts', 'lib/backend/video-jobs.ts', 'components/admin/hero-video-uploader.tsx', 'lib/hero-media.ts']) {
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toContain('HERO_VIDEO_MAX_BYTES');
+      expect(text, file).not.toContain('HERO_VIDEO_MAX_LABEL');
+    }
+    expect(readFileSync('lib/backend/banner-storage.ts', 'utf8')).toContain('videoConfig().maxOutputBytes');
   });
 
-  it('the uploader checks the file contents in the browser before uploading, and registers each upload with the editor session', () => {
+  it('the uploader leaves content checks to the server (it converts what it can), and registers each upload with the editor session', () => {
     const source = readFileSync('components/admin/hero-video-uploader.tsx', 'utf8');
-    expect(source).toContain('inspectHeroVideo(new Uint8Array(await file.arrayBuffer()))');
+    expect(source).toContain('the server inspects the real contents');
+    expect(source).not.toContain('inspectHeroVideo(');
+    expect(source).toContain('uploadBannerVideo(file');
     expect(source).toContain('removeBannerVideo');
     expect(source).toContain('session?.track(');
   });

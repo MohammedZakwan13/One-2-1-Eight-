@@ -660,6 +660,73 @@ paths:
       responses:
         '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/StoreSettings' } } } }
         '422': { $ref: '#/components/responses/Error' }
+  /admin/uploads/banner-video/sessions:
+    post:
+      tags: [Admin]
+      operationId: adminStartBannerVideoUpload
+      summary: Start (or resume) a chunked upload of one banner source video of any size
+      description: "There is no cap on the source size; the only limit is free disk space on the server (a clear 507 says how much is needed). Uploading the same file name and size again resumes the running session. Fails with 503 `media_processing_unavailable` when FFmpeg is not installed; there is no fallback to old size or format rules."
+      security: [{ adminSession: [], csrf: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, size], properties: { name: { type: string }, size: { type: integer, minimum: 1 }, key: { type: string, maxLength: 64, description: 'Optional per-upload key: the same key resumes that upload; without it, the same file name and size resumes' }, mode: { type: string, enum: [original, balanced, small], default: original, description: 'original keeps a browser-compatible file untouched (default); balanced and small compress automatically' } } } } } }
+      responses:
+        '201': { description: Session, content: { application/json: { schema: { $ref: '#/components/schemas/HeroVideoSession' } } } }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '507': { $ref: '#/components/responses/Error' }
+  /admin/uploads/banner-video/sessions/{id}:
+    get:
+      tags: [Admin]
+      operationId: adminGetBannerVideoUpload
+      summary: How many bytes of the upload the server already has (resume from here)
+      security: [{ adminSession: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Session, content: { application/json: { schema: { $ref: '#/components/schemas/HeroVideoSession' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Admin]
+      operationId: adminCancelBannerVideoUpload
+      summary: Abandon an upload and delete its partial file
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: Cancelled }
+  /admin/uploads/banner-video/sessions/{id}/chunk:
+    put:
+      tags: [Admin]
+      operationId: adminUploadBannerVideoChunk
+      summary: Send the next chunk (raw bytes, application/octet-stream) at the position the server expects
+      description: "Chunks must arrive in order; `offset` must equal the bytes already received (a repeated chunk is acknowledged without being written again). A 409 `offset_mismatch` carries the position to continue from in fieldErrors.received."
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: offset, in: query, required: true, schema: { type: integer, minimum: 0 } }]
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses:
+        '200': { description: Progress, content: { application/json: { schema: { $ref: '#/components/schemas/HeroVideoSession' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /admin/uploads/banner-video/sessions/{id}/complete:
+    post:
+      tags: [Admin]
+      operationId: adminCompleteBannerVideoUpload
+      summary: "All bytes arrived: process the video in the chosen mode, then poll the returned job"
+      security: [{ adminSession: [], csrf: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '202': { description: Accepted for conversion, content: { application/json: { schema: { type: object, required: [jobId, status, stage, originalBytes, originalName], properties: { jobId: { type: string }, status: { type: string, enum: [queued, processing] }, stage: { type: string }, originalBytes: { type: integer }, originalName: { type: string } } } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /admin/uploads/banner-video/jobs/{id}:
+    get:
+      tags: [Admin]
+      operationId: adminGetBannerVideoJob
+      summary: Progress of a banner video that is being processed (in memory; lost if the server restarts)
+      security: [{ adminSession: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Job state, content: { application/json: { schema: { $ref: '#/components/schemas/HeroVideoJob' } } } }
+        '404': { $ref: '#/components/responses/Error' }
   /admin/content/luxe-feature:
     get:
       tags: [Admin]
@@ -854,13 +921,15 @@ paths:
       tags: [Admin]
       operationId: adminUploadBannerVideo
       summary: Upload one hero banner video to the banner-media bucket
-      description: "multipart/form-data with a `file` field. MP4 (H.264) or WebM (VP8/VP9), max 12 MB. The container is verified from the file's bytes, not its name or declared MIME type; MP4 files that only contain HEVC/H.265 or AV1 are refused (422 unsupported_codec). `warnings` may advise re-exporting an MP4 with fast start."
+      description: "multipart/form-data with a `file` field (optional `mode`: original, balanced or small). In the default original mode a compatible MP4 (H.264) or WebM (VP8/VP9) is stored exactly as it is (201). Any other common video (MOV, MKV, AVI, WMV, FLV, MPEG, M4V, 3GP, ...) is accepted for background processing (202): poll the job until it is ready. Contents are verified from the bytes, never from the name or declared MIME type. FFmpeg is required: without it the server answers 503 `media_processing_unavailable`. A single request is limited by proxy and memory limits (95 MB); use the chunked sessions for any size."
       security: [{ adminSession: [], csrf: [] }]
       requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
       responses:
         '201': { description: Stored, content: { application/json: { schema: { type: object, required: [path, url], properties: { path: { type: string }, url: { $ref: '#/components/schemas/SafeUrl' }, warnings: { type: array, items: { type: string } } } } } } }
+        '202': { description: Accepted for conversion, content: { application/json: { schema: { type: object, required: [jobId, status, stage, originalBytes, originalName], properties: { jobId: { type: string }, status: { type: string, enum: [queued, processing] }, stage: { type: string }, originalBytes: { type: integer }, originalName: { type: string } } } } } }
         '413': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
     delete:
       tags: [Admin]
@@ -1515,6 +1584,35 @@ components:
       type: object
       required: [status]
       properties: { status: { type: string, enum: [new, contacted, qualified, closed] } }
+    HeroVideoSession:
+      type: object
+      required: [uploadId, size, received, chunkBytes]
+      properties: { uploadId: { type: string }, size: { type: integer }, received: { type: integer }, chunkBytes: { type: integer, description: Recommended chunk size in bytes }, mode: { type: string, enum: [original, balanced, small] } }
+    HeroVideoJob:
+      type: object
+      required: [id, status, stage, percent, originalName, originalBytes, warnings, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [queued, processing, ready, failed] }
+        stage: { type: string, enum: [queued, analyzing, converting, compressing, uploading, saving], description: 'uploading = the processed video is being sent to Supabase Storage (percent is real progress); saving is only produced by older server versions' }
+        ahead: { type: integer, minimum: 0, description: 'Queued jobs only: how many videos are ahead of this one' }
+        percent: { type: number, minimum: 0, maximum: 100 }
+        mode: { type: string, enum: [original, balanced, small] }
+        info: { type: object, description: What happened to the file (preserved / remuxed / re-encoded, resized, sizes, resolutions, notes) }
+        processingMs: { type: number }
+        originalName: { type: string }
+        originalBytes: { type: integer }
+        processedBytes: { type: integer, description: Size of the stored file; limited only by the configurable HERO_VIDEO_MAX_OUTPUT_MB safeguard }
+        path: { type: string }
+        url: { $ref: '#/components/schemas/SafeUrl' }
+        width: { type: number }
+        height: { type: number }
+        durationSeconds: { type: number }
+        converted: { type: boolean }
+        warnings: { type: array, items: { type: string } }
+        error: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } }
+        createdAt: { type: number }
+        updatedAt: { type: number }
     LuxeFeature:
       type: object
       description: The homepage "THE PRIVATE EDIT" band. image may be empty (the band then reuses a banner still). eyebrow and the two description lines may be empty and are then not shown.

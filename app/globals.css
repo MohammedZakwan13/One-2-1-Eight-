@@ -13106,3 +13106,16 @@ button {
 .image-uploader-info p {
   margin: 0;
 }
+/* Banner video optimisation modes and the processing summary (Admin → Homepage & banners). */
+.hb-video-modes { border: 1px solid #e3e0d9; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
+.hb-video-modes legend { padding: 0 6px; font-size: 12px; font-weight: 600; }
+.hb-video-modes label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 8px 10px; border: 1px solid transparent; }
+.hb-video-modes label.is-active { border-color: #1f4e8c; background: #f4f7fb; }
+.hb-video-modes label span { display: grid; gap: 2px; }
+.hb-video-modes label small { color: #686962; font-size: 12px; line-height: 1.4; }
+.hb-video-facts { margin: 8px 0 0; display: grid; gap: 4px; font-size: 12.5px; }
+.hb-video-facts div { display: flex; gap: 10px; flex-wrap: wrap; }
+.hb-video-facts dt { min-width: 74px; color: #686962; }
+.hb-video-facts dd { margin: 0; }
+.hb-video-summary dd { color: #3f5a3c; }
+.hb-note p.is-warning { color: #8a4b00; font-weight: 600; }

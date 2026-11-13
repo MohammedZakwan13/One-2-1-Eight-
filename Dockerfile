@@ -34,6 +34,11 @@ RUN node scripts/copy-swagger.mjs && npm run build
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+# Banner video conversion (lib/backend/video-transcode.ts): Alpine's ffmpeg package ships ffprobe plus the libx264 and aac encoders.
+# The build fails if FFmpeg or either encoder is missing, so an image without working video conversion is never deployed.
+RUN apk add --no-cache ffmpeg \
+ && ffmpeg -version | head -n 1 && ffprobe -version | head -n 1 \
+ && ffmpeg -hide_banner -encoders | grep -E ' libx264 ' && ffmpeg -hide_banner -encoders | grep -E ' aac '
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static

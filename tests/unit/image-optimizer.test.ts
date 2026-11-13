@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatBytes,
@@ -14,7 +15,6 @@ import {
   MAX_ORIGINAL_IMAGE_BYTES,
 } from '@/lib/upload-limits';
 import { createUploadSession } from '@/lib/upload-session';
-import { HERO_VIDEO_MAX_BYTES, HERO_VIDEO_MAX_LABEL } from '@/lib/hero-media';
 
 // Helper to construct mock files with magic headers
 function createMockFile(size: number, mime: string, name: string): File {
@@ -381,9 +381,9 @@ describe('Centralized Image Optimization & Upload Pipeline', () => {
   });
 
   // 18. Existing video upload behaviour remains unchanged
-  it('18. confirms hero banner video limits and bucket separation remain intact', () => {
-    expect(HERO_VIDEO_MAX_BYTES).toBe(12 * 1024 * 1024);
-    expect(HERO_VIDEO_MAX_LABEL).toBe('12 MB');
+  it('18. image limits stay separate from banner videos: videos use their own bucket and an admin-chosen optimisation mode, not the 10 MB image rule', () => {
+    expect(MAX_IMAGE_UPLOAD_BYTES).toBe(10 * 1024 * 1024);
+    expect(readFileSync('supabase/migrations/0013_banner_video_size_limit.sql', 'utf8')).toContain("id = 'banner-media'");
   });
 
   it('formats byte strings cleanly for human readability', () => {

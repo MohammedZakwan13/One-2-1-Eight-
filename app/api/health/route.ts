@@ -30,5 +30,11 @@ export async function GET(request: Request) {
       return Response.json({ status: 'degraded', backend: 'unreachable' }, { status: 503, headers });
     }
   }
+  // Deep health also reports whether banner-video processing (FFmpeg) is installed. It never changes the HTTP status: the production image build
+  // already fails without FFmpeg, and the admin upload says exactly what is missing; this makes the state visible to monitoring.
+  if (new URL(request.url).searchParams.get('deep') === '1' && env.apiMode === 'supabase') {
+    const { ffmpegAvailable } = await import('@/lib/backend/video-transcode');
+    return Response.json({ status: 'ok', mode: env.apiMode, videoProcessing: (await ffmpegAvailable()) ? 'ok' : 'ffmpeg_missing' }, { headers });
+  }
   return Response.json({ status: 'ok', mode: env.apiMode }, { headers });
 }

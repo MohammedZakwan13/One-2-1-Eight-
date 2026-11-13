@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { adminHeroSlideUpdateSchema, heroSlideSchema } from '@/lib/api/schemas';
-import { HERO_VIDEO_MAX_BYTES, HERO_VIDEO_MAX_LABEL, effectiveMediaType, inspectHeroVideo, isValidReorder, moveId, resolveHeroMedia, videoFileProblem, type HeroMediaFields } from '@/lib/hero-media';
+import { effectiveMediaType, inspectHeroVideo, isValidReorder, moveId, resolveHeroMedia, videoFileProblem, type HeroMediaFields } from '@/lib/hero-media';
 import { parseMp4, parseWebm } from '@/lib/video-structure';
 import { buildCsp } from '@/lib/security-headers';
 import { mp4, webm } from './helpers/media-fixtures';
@@ -115,9 +115,12 @@ describe('video inspection reads the container structure, not text in the file',
 
   it('the browser-side file check applies the same type and size rules', () => {
     expect(videoFileProblem({ name: 'a.mp4', type: 'video/mp4', size: 1000 })).toBeNull();
-    expect(videoFileProblem({ name: 'a.webm', type: 'video/webm', size: HERO_VIDEO_MAX_BYTES })).toBeNull();
-    expect(videoFileProblem({ name: 'a.mov', type: 'video/quicktime', size: 1000 })).toMatch(/only MP4/);
-    expect(videoFileProblem({ name: 'big.mp4', type: 'video/mp4', size: HERO_VIDEO_MAX_BYTES + 1 })).toContain(HERO_VIDEO_MAX_LABEL);
+    expect(videoFileProblem({ name: 'a.webm', type: 'video/webm', size: 12 * 1024 * 1024 })).toBeNull();
+    // Common formats are accepted by the browser check; the server converts them. Only non-videos and over-large originals are refused here.
+    for (const [name, type] of [['a.mov', 'video/quicktime'], ['a.mkv', ''], ['a.avi', 'video/x-msvideo'], ['a.wmv', ''], ['a.flv', ''], ['a.mpeg', 'video/mpeg'], ['a.m4v', 'video/x-m4v'], ['a.3gp', 'video/3gpp']]) expect(videoFileProblem({ name, type, size: 1000 })).toBeNull();
+    expect(videoFileProblem({ name: 'doc.pdf', type: 'application/pdf', size: 1000 })).toMatch(/choose a video/);
+    // The 12 MB limit applies to the processed video only: a source of ANY size is accepted by the browser check (it is uploaded in chunks).
+    for (const size of [12 * 1024 * 1024 + 1, 20e6, 50e6, 100e6, 200e6, 1e9, 5e9]) expect(videoFileProblem({ name: 'big.mp4', type: 'video/mp4', size })).toBeNull();
     expect(videoFileProblem({ name: 'e.mp4', type: 'video/mp4', size: 0 })).toMatch(/empty/);
   });
 

@@ -11,19 +11,23 @@ import { parseMp4, parseWebm } from './video-structure';
 
 export type HeroMediaType = 'image' | 'video';
 
-export const HERO_VIDEO_MAX_BYTES = 12 * 1024 * 1024;
-export const HERO_VIDEO_MAX_LABEL = '12 MB';
 export const HERO_VIDEO_TYPES = ['video/mp4', 'video/webm'] as const;
-export const HERO_VIDEO_ACCEPT = HERO_VIDEO_TYPES.join(',');
+/** What the server stores WITHOUT converting (the original rules): an MP4 (H.264) or WebM (VP8/VP9) of at most 12 MB. */
 export const HERO_VIDEO_FORMATS_LABEL = 'MP4 (H.264) or WebM (VP8/VP9)';
-
-const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+/**
+ * What the admin may pick: any common video. Larger or non-MP4 files are converted on the server (when FFmpeg is installed) into an H.264 MP4 of at
+ * most 12 MB. The browser only filters by extension / MIME type as a convenience; the server re-checks the real contents.
+ */
+export const HERO_VIDEO_EXTENSIONS = ['mp4', 'm4v', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', '3gp', 'webm'] as const;
+export const HERO_VIDEO_ACCEPT = ['video/*', ...HERO_VIDEO_EXTENSIONS.map(ext => `.${ext}`)].join(',');
+export const HERO_VIDEO_PICKER_LABEL = 'MP4, MOV, MKV, AVI, WMV, FLV, MPEG, M4V, 3GP or WebM';
 
 /** The browser-side check, repeated by the server from the file's bytes. Returns a message, or null when the file may be uploaded. */
 export function videoFileProblem(file: { name: string; type: string; size: number }): string | null {
-  if (!(HERO_VIDEO_TYPES as readonly string[]).includes(file.type)) return `${file.name}: only ${HERO_VIDEO_FORMATS_LABEL} videos are allowed.`;
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (!file.type.startsWith('video/') && !(HERO_VIDEO_EXTENSIONS as readonly string[]).includes(extension)) return `${file.name}: please choose a video file (${HERO_VIDEO_PICKER_LABEL}).`;
   if (file.size === 0) return `${file.name}: that file is empty.`;
-  if (file.size > HERO_VIDEO_MAX_BYTES) return `${file.name} is ${formatBytes(file.size)}. Videos must be ${HERO_VIDEO_MAX_LABEL} or smaller: compress it or shorten the clip.`;
+  // No source-size check here on purpose: any size is uploaded in chunks, and the 12 MB limit applies to the PROCESSED video only.
   return null;
 }
 

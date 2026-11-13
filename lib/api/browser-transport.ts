@@ -9,7 +9,11 @@ import { csrfTokenSchema } from '@/lib/api/schemas';
 const API_PREFIX = '/api/v1';
 let csrfPromise: Promise<string> | null = null;
 
-async function loadCsrfToken(force = false): Promise<string> {
+/**
+ * One shared, in-flight CSRF token for the whole page: JSON calls and uploads must all use it. Fetching a token per request would let two
+ * simultaneous first requests mint different tokens (the last cookie wins) and make one of them fail.
+ */
+export async function loadCsrfToken(force = false): Promise<string> {
   if (!csrfPromise || force) {
     csrfPromise = fetch(`${API_PREFIX}/csrf-token`, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(async response => {
