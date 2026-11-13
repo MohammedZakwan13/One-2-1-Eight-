@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HeroSlide } from '@/lib/api/schemas';
 import { resolveHeroMedia } from '@/lib/hero-media';
-import { MIN_VIDEO_SLIDE_MS, slideKind, type HeroEnvironment } from '@/lib/hero-timing';
+import { shouldLoopVideo, slideKind, type HeroEnvironment } from '@/lib/hero-timing';
 import { syncVideoPlayback } from '@/lib/hero-pause';
 import type { VideoPlayback } from '@/lib/hooks/use-hero-carousel';
 
 const MOBILE_QUERY = '(max-width: 600px)';
 
 /** One banner video. Mounted only for the slide on screen and only when it will really play, keyed by its file so a device change replaces it. */
-function HeroVideo({ src, poster, priority, paused, playback }: { src: string; poster: string; priority: boolean; paused: boolean; playback: VideoPlayback }) {
+function HeroVideo({ src, poster, priority, paused, playback, single }: { src: string; poster: string; priority: boolean; paused: boolean; playback: VideoPlayback; /** The only banner: there is no next slide, so the video loops. */ single: boolean }) {
   const element = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -41,15 +41,15 @@ function HeroVideo({ src, poster, priority, paused, playback }: { src: string; p
     className={`hero-video ${ready ? 'is-ready' : ''}`}
     src={src}
     poster={poster || undefined}
-    autoPlay muted playsInline
+    autoPlay muted playsInline loop={single}
     preload={priority ? 'auto' : 'metadata'}
     aria-hidden="true"
     tabIndex={-1}
     onLoadedMetadata={event => {
       const video = event.currentTarget;
       video.muted = true;
-      // Under 6 s the clip loops (the carousel waits out its minimum); 6 s and longer plays once to the end.
-      video.loop = !(Number.isFinite(video.duration) && video.duration * 1000 >= MIN_VIDEO_SLIDE_MS);
+      // A lone banner always loops. With several: under 6 s the clip loops (the carousel waits out its minimum); 6 s and longer plays once to the end.
+      video.loop = shouldLoopVideo(video.duration, single);
       playback.onMetadata(video.duration);
     }}
     onPlaying={() => { setReady(true); playback.onPlaying(); }}
@@ -65,7 +65,7 @@ function HeroVideo({ src, poster, priority, paused, playback }: { src: string; p
  * visitor's own device is requested: the other device's file is never downloaded. Which kind of slide this is comes from the same
  * `slideKind` the carousel timing uses, so what is shown and how long it stays can never disagree.
  */
-export function HeroMedia({ slide, priority, env, paused, playback }: { slide: HeroSlide; priority: boolean; env: HeroEnvironment; paused: boolean; playback: VideoPlayback }) {
+export function HeroMedia({ slide, priority, env, paused, playback, single = false }: { slide: HeroSlide; priority: boolean; env: HeroEnvironment; paused: boolean; playback: VideoPlayback; single?: boolean }) {
   const desktop = resolveHeroMedia(slide, 'desktop');
   const mobile = resolveHeroMedia(slide, 'mobile');
   const desktopStill = desktop.image || mobile.image;
@@ -79,6 +79,6 @@ export function HeroMedia({ slide, priority, env, paused, playback }: { slide: H
       {mobileStill && mobileStill !== desktopStill && <source media={MOBILE_QUERY} srcSet={mobileStill} />}
       {desktopStill && <img className="hero-photo" src={desktopStill} alt={alt} fetchPriority={priority ? 'high' : 'auto'} onError={event => { event.currentTarget.style.opacity = '0'; }} />}
     </picture>
-    {videoSrc && <HeroVideo key={videoSrc} src={videoSrc} poster={active.image} priority={priority} paused={paused} playback={playback} />}
+    {videoSrc && <HeroVideo key={videoSrc} src={videoSrc} poster={active.image} priority={priority} paused={paused} playback={playback} single={single} />}
   </div>;
 }

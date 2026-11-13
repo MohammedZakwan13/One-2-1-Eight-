@@ -42,7 +42,7 @@ export function HeroCarousel({ slides, brandLine }: { slides: HeroSlide[]; brand
     {several && <button type="button" className="hero-arrow hero-arrow-prev" onClick={() => step(-1)} aria-label="Previous banner"><ChevronLeft size={18} aria-hidden="true" /></button>}
     {several && <button type="button" className="hero-arrow hero-arrow-next" onClick={() => step(1)} aria-label="Next banner"><ChevronRight size={18} aria-hidden="true" /></button>}
     {slide ? <Link href={slide.href} className="hero-slide hero-slide-link" key={slide.id} onClick={event => { if (consumeSwipeClick()) { event.preventDefault(); return; } onTransition(); }} aria-label="Shop all ONE 2 1 EIGHT menswear">
-      <HeroMedia slide={slide} priority={index === 0} env={env} paused={paused} playback={playback} />
+      <HeroMedia slide={slide} priority={index === 0} env={env} paused={paused} playback={playback} single={!several} />
       <div className="hero-gradient" />
       <div className="hero-content"><h1>{slide.title.split('\n').map((line, idx) => <React.Fragment key={`${line}-${idx}`}>{line}{idx === 0 && slide.title.includes('\n') && <br />}</React.Fragment>)}</h1><p>{slide.body}</p></div>
     </Link> : <div className="hero-empty"><BrandMark /><h1>{brandLine}</h1></div>}

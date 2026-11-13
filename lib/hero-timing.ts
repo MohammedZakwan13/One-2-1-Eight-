@@ -54,6 +54,15 @@ export function slideKind(slide: HeroMediaFields, env: HeroEnvironment): SlideKi
   return media.type === 'video' && media.video ? 'video' : 'image';
 }
 
+/**
+ * Whether a banner video should loop by itself. A lone banner has no next slide to hand over to, so nothing would ever advance after the video ends and
+ * it would freeze on its last frame: it always loops. With several banners the rules above are unchanged (shorter than 6 s loops; 6 s or longer plays
+ * once and the carousel advances on `ended`).
+ */
+export function shouldLoopVideo(durationSeconds: number, singleBanner: boolean): boolean {
+  return singleBanner || !(Number.isFinite(durationSeconds) && durationSeconds * 1000 >= MIN_VIDEO_SLIDE_MS);
+}
+
 /** The ORIGINAL automatic rotation, unchanged: one interval, IMAGE_SLIDE_MS, never reset by a slide change. Returns its cleanup. */
 export function startImageRotation(slideCount: number, advance: () => void): () => void {
   if (slideCount < 2) return () => undefined;
