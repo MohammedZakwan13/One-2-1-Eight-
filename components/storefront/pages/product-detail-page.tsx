@@ -15,6 +15,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
 import { useWishlistToggle } from '@/lib/hooks/use-wishlist-toggle';
+import { ProductShare } from '@/components/storefront/product-share';
+import { productShareUrl } from '@/lib/product-share';
 import { useCart } from '@/lib/hooks/use-cart';
 import { api } from '@/lib/api/client';
 import { errorMessage, isUnauthorized } from '@/lib/api/errors';
@@ -25,7 +27,7 @@ import { useProductGallery } from '@/lib/hooks/use-product-gallery';
 
 const EMPTY_REVIEWS: ReviewList = { summary: { average: 0, count: 0, distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 } }, items: [] };
 
-export function ProductDetailPage({ product, related, initialReviews }: { product: Product; related: Product[]; initialReviews: ReviewList | null }) {
+export function ProductDetailPage({ product, related, initialReviews, canonicalUrl }: { product: Product; related: Product[]; initialReviews: ReviewList | null; /** The product's canonical URL from the server (configured site origin + slug); the share button shares exactly this. */ canonicalUrl?: string }) {
   const { settings } = useStorefrontData();
   const { transition: onTransition, notify } = useUi();
   const { wishlist, onToggleWishlist } = useWishlistToggle();
@@ -136,7 +138,8 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
         <div className="gallery-main" {...gallery.mainProps}>
           <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager />
           {hasMultipleImages && <span className="gallery-image-number" aria-live="polite">{counter.current} <i>/</i> {counter.total}</span>}
-          <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={20} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+          <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={22} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+          <ProductShare url={canonicalUrl ?? productShareUrl(undefined, product.slug)} productName={product.name} brandName={settings.brandName} />
           {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-prev" onClick={() => gallery.go(-1)} aria-label="Previous product image"><ChevronLeft size={18} aria-hidden="true" /></button>}
           {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-next" onClick={() => gallery.go(1)} aria-label="Next product image"><ChevronRight size={18} aria-hidden="true" /></button>}
         </div>

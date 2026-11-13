@@ -2569,8 +2569,8 @@ button {
   position: absolute;
   top: 13px;
   right: 13px;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2587,8 +2587,44 @@ button {
   transform: scale(1.08);
 }
 
+.gallery-wishlist:active, .gallery-share:active {
+  transform: scale(0.94);
+}
+
+.gallery-wishlist:focus-visible {
+  outline: 2px solid #b8913f;
+  outline-offset: 2px;
+}
+
 .gallery-wishlist.is-saved {
   color: #a44438;
+}
+
+/* Product share: the icon sits directly below the wishlist heart in the gallery's top-right corner. */
+.product-share { position: absolute; top: 59px; right: 13px; z-index: 3; }
+.gallery-share {
+  width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 50%; color: var(--ink, #111111); cursor: pointer;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.gallery-share:hover { transform: scale(1.08); color: #8a6a2c; }
+.gallery-share:focus-visible, .share-option:focus-visible, .share-link-field:focus-visible { outline: 2px solid #b8913f; outline-offset: 2px; }
+.share-popover {
+  position: absolute; top: 44px; right: 0; width: 220px; padding: 10px; display: grid; gap: 2px;
+  background: #faf8f3; color: #111111; border: 1px solid #d9cfba; box-shadow: 0 14px 34px rgba(17, 17, 17, 0.18);
+}
+.share-popover-title { margin: 0 4px 6px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #8a6a2c; }
+.share-option {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; background: transparent; border: 0;
+  color: #111111; font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer;
+}
+.share-option:hover { background: #111111; color: #f3e7c9; }
+.share-link-field { margin-top: 6px; width: 100%; min-height: 38px; padding: 0 8px; font: inherit; font-size: 12px; border: 1px solid #d9cfba; background: #ffffff; color: #111111; }
+@media (max-width: 760px) {
+  .product-share { top: 54px; right: 8px; }
+  .gallery-share { width: 44px; height: 44px; }
+  .share-popover { width: min(260px, calc(100vw - 32px)); }
+  .share-option { min-height: 44px; }
 }
 
 .gallery-thumbnails {
@@ -8048,10 +8084,10 @@ button {
   }
 
   .gallery-wishlist {
-    top: 10px;
-    right: 10px;
-    width: 34px;
-    height: 34px;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
     background: transparent;
   }
 
