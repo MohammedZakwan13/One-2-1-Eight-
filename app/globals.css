@@ -4221,6 +4221,13 @@ button {
   font-size: 8px !important
 }
 
+.otp-status {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #3f5a3c;
+}
+
 .login-success .eyebrow {
   margin: 17px 0 7px
 }
