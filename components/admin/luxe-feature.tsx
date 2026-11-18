@@ -43,6 +43,7 @@ export function LuxeFeatureEditor({ fallbackImage }: { fallbackImage: string }) 
     try {
       const saved = await api.admin.content.updateLuxeFeature(parsed.data);
       await session.commit([saved.image].filter(Boolean));
+      client.setQueryData(['admin', 'luxe-feature'], { luxeFeature: saved, available: true }); // the effect below must see the saved copy, never the pre-save one
       setDraft(saved); setTouched(false);
       await client.invalidateQueries({ queryKey: ['admin', 'luxe-feature'] });
       notify(saved.enabled ? 'Private Edit section saved: the homepage is updated.' : 'Private Edit section saved and hidden from the homepage.');
@@ -57,7 +58,7 @@ export function LuxeFeatureEditor({ fallbackImage }: { fallbackImage: string }) 
   return <section className="admin-card hb-editor lf-editor" aria-label="Private Edit homepage section">
     <div className="hb-editor-head">
       <div><span className="eyebrow">HOME / LUXE FEATURE BAND</span><h3>The Private Edit section</h3>
-        <p className="hb-hint">The full-width “ONE 2 1 EIGHT LUXE” band below the best-seller rail. Edit its picture, copy and button, check the preview, then save.</p></div>
+        <p className="hb-hint">The full-width “ONE 2 1 EIGHT LUXE” band below the best-seller rail. Edit its picture, optional description and button, check the preview, then save.</p></div>
       <label className="admin-toggle"><input type="checkbox" checked={draft.enabled} onChange={event => set({ enabled: event.target.checked })} aria-label="Show this section on the homepage" /><span /></label>
     </div>
 
@@ -68,30 +69,24 @@ export function LuxeFeatureEditor({ fallbackImage }: { fallbackImage: string }) 
     <div className="hb-section"><h4><b>1</b> Picture</h4>
       <ImageUploader label="Section image" max={1} images={draft.image ? [draft.image] : []} onChange={images => set({ image: images[0] ?? '' })} onBusyChange={setUploading} session={session}
         hint="Wide landscape works best (it is cropped to fill the band). JPEG, PNG, WebP or AVIF · up to 10 MB (larger images auto-optimized). Removing it makes the band reuse your homepage banner picture." />
-      <label>Image description (alt text) <small>Describes the picture for screen readers.</small><input maxLength={160} value={draft.imageAlt} onChange={event => set({ imageAlt: event.target.value })} /></label>
+      <label>Image alt text (optional) <small>For screen readers only; it is never shown on the page. You can leave it empty.</small><input maxLength={160} value={draft.imageAlt} onChange={event => set({ imageAlt: event.target.value })} /></label>
+      <label>Visible description (optional) <small>Shown to customers below the picture. Leave it empty to show nothing.</small><textarea rows={3} maxLength={300} value={draft.description} onChange={event => set({ description: event.target.value })} /></label>
     </div>
 
-    <div className="hb-section"><h4><b>2</b> Text</h4>
-      <label>Small heading above the title<input maxLength={60} value={draft.eyebrow} onChange={event => set({ eyebrow: event.target.value })} /></label>
-      <label>Main heading <small>The second line is shown in the italic accent colour (use Enter for a new line).</small><textarea rows={2} maxLength={100} value={draft.heading} onChange={event => set({ heading: event.target.value })} /></label>
-      <label>Description, line 1<input maxLength={120} value={draft.bodyLine1} onChange={event => set({ bodyLine1: event.target.value })} /></label>
-      <label>Description, line 2<input maxLength={120} value={draft.bodyLine2} onChange={event => set({ bodyLine2: event.target.value })} /></label>
-    </div>
-
-    <div className="hb-section"><h4><b>3</b> Button</h4>
+    <div className="hb-section"><h4><b>2</b> Button</h4>
       <label>Button label<input maxLength={40} value={draft.ctaLabel} onChange={event => set({ ctaLabel: event.target.value })} /></label>
       <label>Button destination <small>A path on this site, for example /collections/one-2-1-eight-luxe</small><input value={draft.ctaHref} onChange={event => set({ ctaHref: event.target.value })} placeholder="/collections/one-2-1-eight-luxe" /></label>
     </div>
 
-    <div className="hb-section"><h4><b>4</b> Preview</h4>
+    <div className="hb-section"><h4><b>3</b> Preview</h4>
       <div className={`lf-preview ${draft.enabled ? '' : 'is-hidden'}`}><LuxeFeatureBand feature={preview} preview /></div>
-      <p className="hb-hint">{draft.enabled ? 'This is how the section will look. It goes live when you press Save.' : 'This section is switched off: it is not shown on the homepage.'} The preview is a reduced-size view; the real section scales with the screen.</p>
+      <p className="hb-hint">{draft.enabled ? 'This is how the section will look. It goes live when you press Save.' : 'This section is switched off: it is not shown on the homepage.'} The picture fills the band and is cropped to fit; the real section scales with the screen.</p>
     </div>
 
     {errors.length > 0 && <div className="form-error-banner" role="alert">{errors.map(message => <p key={message}>{message}</p>)}</div>}
     {uploading && <p className="hb-hint" role="status">Uploading image… saving is available when it finishes.</p>}
     <div className="hb-editor-actions">
-      <button type="button" className="admin-secondary-btn" onClick={restoreDefaults} disabled={saving}><RotateCcw size={14} /> Restore original text</button>
+      <button type="button" className="admin-secondary-btn" onClick={restoreDefaults} disabled={saving}><RotateCcw size={14} /> Restore defaults</button>
       <button type="button" className="admin-primary-btn" onClick={() => void save()} disabled={saving || uploading || !available}><Check size={15} /> {saving ? 'Saving…' : 'Save section'}</button>
     </div>
   </section>;

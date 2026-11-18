@@ -204,17 +204,16 @@ export const heroSlideSchema = z.object({
 export type HeroSlide = z.infer<typeof heroSlideSchema>;
 
 /**
- * The editable homepage "THE PRIVATE EDIT" band. `image` may be empty (the band then reuses a banner still). The call-to-action needs a label
- * and a site-relative destination; the eyebrow and the two description lines may be left empty and are then simply not shown.
+ * The editable homepage "THE PRIVATE EDIT" band: a picture and a call-to-action. `image` may be empty (the band then reuses a banner still).
+ * `imageAlt` is accessibility-only text and optional (absent or empty means a decorative picture). `description` is an optional line of text
+ * shown to customers below the picture (empty = nothing is rendered). The call-to-action needs a label and a site-relative destination.
+ * Older saved or submitted copies that still carry heading / eyebrow / description text are accepted: the unknown keys are simply dropped.
  */
 export const luxeFeatureSchema = z.object({
   enabled: z.boolean(),
   image: optionalSafeUrl,
-  imageAlt: z.string().trim().max(160),
-  eyebrow: z.string().trim().max(60),
-  heading: z.string().trim().min(1, 'Add a heading').max(100),
-  bodyLine1: z.string().trim().max(120),
-  bodyLine2: z.string().trim().max(120),
+  imageAlt: z.string().trim().max(160).default(''),
+  description: z.string().trim().max(300).default(''),
   ctaLabel: z.string().trim().min(1, 'Add a button label').max(40),
   ctaHref: internalPath,
 });

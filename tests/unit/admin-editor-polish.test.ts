@@ -24,13 +24,14 @@ describe('Admin editor polish', () => {
     expect(products).toContain('blankDraft()');
     expect(read('lib/product-editor.ts')).toContain("status: 'active'");
   });
-  it('anchors badge and discount tags to a box sized from the photo ratio, not the square frame', () => {
+  it('anchors badge and discount tags inside the 3:4 photo frame (out of flow, so the frame keeps its size)', () => {
     const card = read('components/storefront/product-card.tsx');
-    expect(card).toMatch(/product-card-image-box[\s\S]*product-card-tags/);
-    expect(card).toContain('onNaturalSize');
+    expect(card).toMatch(/product-card-media[\s\S]*product-card-tags/);
+    expect(card).not.toContain('onNaturalSize');
+    expect(card).not.toContain('--img-ratio');
     const css = read('app/globals.css');
-    expect(css).toMatch(/\.product-card-image-box\s*\{[^}]*var\(--img-ratio/);
-    expect(css).toMatch(/\.product-card-tags\s*\{[^}]*max-width: min\(/);
+    expect(css).not.toContain('--img-ratio');
+    expect(css).toMatch(/\.product-card-tags\s*\{[^}]*position: absolute/);
     expect(css).toMatch(/\.product-card-media\s*\{\s*container-type: size/);
   });
 });

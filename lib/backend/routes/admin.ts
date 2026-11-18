@@ -416,7 +416,7 @@ route('PUT', '/admin/content/luxe-feature', async ctx => {
   const before = await getSettingsRow();
   if (!('luxe_feature' in before)) throw migrationRequired();
   const oldImage: string = typeof before.luxe_feature?.image === 'string' ? before.luxe_feature.image : '';
-  const stored = { enabled: input.enabled, image: storedImage(input.image), imageAlt: input.imageAlt, eyebrow: input.eyebrow, heading: input.heading, bodyLine1: input.bodyLine1, bodyLine2: input.bodyLine2, ctaLabel: input.ctaLabel, ctaHref: input.ctaHref };
+  const stored = { enabled: input.enabled, image: storedImage(input.image), imageAlt: input.imageAlt, description: input.description, ctaLabel: input.ctaLabel, ctaHref: input.ctaHref };
   const { data, error } = await db().from('store_settings').update({ luxe_feature: stored, updated_at: new Date().toISOString() }).eq('id', 1).select('*').single();
   if (error) {
     if (luxeColumnMissing(error.message)) throw migrationRequired();

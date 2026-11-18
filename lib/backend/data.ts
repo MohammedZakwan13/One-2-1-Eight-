@@ -28,8 +28,7 @@ export const toLuxeFeature = (r: Row): LuxeFeature | null => {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const text = (key: string) => (typeof v[key] === 'string' ? v[key] : '');
   const parsed = luxeFeatureSchema.safeParse({
-    enabled: v.enabled !== false, image: text('image') ? imageUrl(text('image')) : '', imageAlt: text('imageAlt'), eyebrow: text('eyebrow'), heading: text('heading'),
-    bodyLine1: text('bodyLine1'), bodyLine2: text('bodyLine2'), ctaLabel: text('ctaLabel'), ctaHref: text('ctaHref'),
+    enabled: v.enabled !== false, image: text('image') ? imageUrl(text('image')) : '', imageAlt: text('imageAlt'), description: text('description'), ctaLabel: text('ctaLabel'), ctaHref: text('ctaHref'),
   });
   if (!parsed.success) { console.error('[backend] luxe_feature is invalid; the storefront uses its default copy'); return null; }
   return parsed.data;
