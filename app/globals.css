@@ -820,12 +820,14 @@ button {
   height: 100%;
 }
 
+/* Every product card photo frame is 3:4 portrait (apparel), and the photo fills it (cover). The same frame is used by every grid:
+   home rails, shop all, collections, search, related and wishlist. */
 .product-card-media {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  background: #ffffff;
+  background: #f0eee8;
   flex-shrink: 0;
 }
 
@@ -845,11 +847,12 @@ button {
   background: transparent;
 }
 
+/* Cover keeps the photo undistorted. The focal point sits near the top so a portrait photo loses its bottom edge (never the face) and a square photo is trimmed evenly left and right. */
 .product-card-media .smart-image img {
   width: 100%;
   height: 100%;
-  object-fit: contain !important;
-  object-position: center center !important;
+  object-fit: cover;
+  object-position: 50% 15%;
   background: transparent;
   transition: transform .85s cubic-bezier(.2, .6, .2, 1);
 }
@@ -858,49 +861,57 @@ button {
   transform: scale(1.045);
 }
 
-/* Box that matches the visible photo (object-fit: contain) inside the square frame; tags are positioned inside it. */
 .product-card-media { container-type: size; }
 
-.product-card-image-box {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  z-index: 2;
-  width: min(100cqw, calc(100cqh * var(--img-ratio, 1)));
-  height: min(100cqh, calc(100cqw / var(--img-ratio, 1)));
-  pointer-events: none;
-}
+/* Badges (top-left) and the wishlist button (top-right) sit INSIDE the photo frame, which is the positioning container. They are out of flow, so the
+   frame keeps its exact 3:4 size and the card gains no extra height. The card is a named size container so the overlays adapt to the card width. */
+.product-card { container-type: inline-size; container-name: pcard; }
 
-/* Tags stack at the photo's top-left and stop short of the wishlist button. */
 .product-card-tags {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  max-width: min(calc(100% - 16px), calc(100cqw - 64px - (100cqw - 100%) / 2));
+  top: 10px;
+  left: 10px;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+  pointer-events: none;
 }
 
+/* Two badges stacked in the top-left corner at every width: NEW DROP on top, the discount directly underneath. Each label stays on one line and is never truncated. */
 .product-badge,
 .discount-badge {
   box-sizing: border-box;
-  max-width: 100%;
-  padding: 6px 8px;
-  background: rgba(248, 247, 243, .94);
-  font-size: 7px;
-  line-height: 1.3;
-  letter-spacing: .13em;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 2px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  letter-spacing: .06em;
   font-weight: 700;
-  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+}
+
+.product-badge {
+  background: var(--accent-light);
+  color: var(--ink);
+  border: 1px solid rgba(186, 132, 82, .55);
 }
 
 .discount-badge {
+  padding: 0 7px;
   background: var(--ink);
-  color: white;
+  color: #fff;
+  border: 1px solid rgba(231, 212, 187, .55);
 }
 
+/* Wishlist: a 40px circle in the top-right corner on phones (42px on desktop). An invisible 2px ring around it keeps the touch target at 44px or more. */
 .wishlist-float {
   position: absolute;
   top: 10px;
@@ -911,24 +922,96 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
   color: var(--ink, #111111);
   cursor: pointer;
-  transition: transform .18s ease, color .18s ease, background .18s ease;
+  transition: transform .18s ease, color .18s ease, background .18s ease, border-color .18s ease;
+}
+
+.wishlist-float::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+}
+
+.wishlist-float svg {
+  width: 19px;
+  height: 19px;
+  flex: none;
 }
 
 .wishlist-float:hover {
-  transform: scale(1.08);
-  background: #ffffff;
+  transform: scale(1.06);
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.wishlist-float:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: 2px;
 }
 
 .wishlist-float:hover,
 .wishlist-float.is-saved {
   color: #9e4438;
+}
+
+.wishlist-float.is-saved {
+  border-color: rgba(158, 68, 56, .45);
+}
+
+/* Desktop: slightly larger overlays, same stacked arrangement. */
+@media (min-width: 761px) {
+  .product-card-tags {
+    top: 12px;
+    left: 12px;
+  }
+
+  .product-badge,
+  .discount-badge {
+    min-height: 30px;
+    font-size: 12px
+  }
+
+  .wishlist-float {
+    top: 12px;
+    right: 12px;
+    width: 42px;
+    height: 42px
+  }
+
+  .wishlist-float svg {
+    width: 20px;
+    height: 20px
+  }
+}
+
+/* Narrow cards (two per row on a small phone): a little closer to the corners and one step smaller, still stacked. */
+@container pcard (max-width: 205px) {
+  .product-card-tags {
+    top: 8px;
+    left: 8px
+  }
+
+  .product-badge,
+  .discount-badge {
+    padding: 0 7px;
+    font-size: 10px;
+    letter-spacing: .05em
+  }
+
+  .discount-badge {
+    padding: 0 6px
+  }
+
+  .wishlist-float {
+    top: 8px;
+    right: 8px
+  }
 }
 
 .quick-add {
@@ -1102,7 +1185,6 @@ button {
 
 .campaign-copy h2 em,
 .seller-intro h2 em,
-.luxe-feature-content h2 em,
 .login-editorial-copy h1 em,
 .admin-aside-copy h1 em,
 .checkout-title h1 em,
@@ -1150,62 +1232,65 @@ button {
 }
 
 .luxe-feature {
-  height: clamp(430px, 54vw, 700px);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: clamp(430px, 54vw, 700px);
   overflow: hidden;
-  background: #44423d;
+  background: #0d0e0c;
   color: white
 }
 
+/* Full-bleed hero: the picture covers the whole band. Same focal point as the original band (30%), which keeps the headline area of campaign artwork in view. */
 .luxe-feature>.smart-image {
   position: absolute;
   inset: 0
 }
 
 .luxe-feature>.smart-image img {
+  object-fit: cover;
   object-position: center 30%
 }
 
 .luxe-feature-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(13, 14, 12, .69), rgba(13, 14, 12, .18) 55%, rgba(13, 14, 12, .1)), linear-gradient(0deg, rgba(0, 0, 0, .3), transparent 40%)
+  pointer-events: none;
+  background: linear-gradient(0deg, rgba(8, 9, 8, .62), rgba(8, 9, 8, 0) 48%), linear-gradient(90deg, rgba(8, 9, 8, .4), rgba(8, 9, 8, 0) 55%)
 }
 
+/* Description and button belong to the hero: they sit together at the lower left. In normal flow, so a long description grows the band instead of overflowing it. */
 .luxe-feature-content {
-  position: absolute;
-  left: var(--page-pad);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 2
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  max-width: min(100%, 560px);
+  padding: 0 var(--page-pad) clamp(28px, 4vw, 52px)
 }
 
-.luxe-feature-content .eyebrow {
-  color: #ddd2c4;
-  margin-bottom: 17px
-}
-
-.luxe-feature-content h2 {
-  font: 600 clamp(42px, 6.5vw, 88px)/.92 var(--font-display);
-  letter-spacing: -.07em;
-  margin: 0
-}
-
-.luxe-feature-content h2 em {
-  color: #e5c6a1
-}
-
-.luxe-feature-content p {
+.luxe-feature-description {
+  max-width: 22rem;
+  margin: 0;
   font-size: 13px;
   line-height: 1.8;
-  color: rgba(255, 255, 255, .8);
-  margin: 21px 0 28px
+  color: rgba(255, 255, 255, .9);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, .65)
+}
+
+.luxe-feature-content .button {
+  max-width: 100%
 }
 
 .luxe-feature-side {
   position: absolute;
   right: var(--page-pad);
   bottom: 29px;
+  z-index: 2;
   writing-mode: vertical-rl;
   letter-spacing: .2em;
   font-size: 8px;
@@ -7480,35 +7565,6 @@ button {
     gap: 25px 9px
   }
 
-  .product-card-media {
-    aspect-ratio: 1 / 1;
-    background: #ffffff;
-  }
-
-  .product-card-tags {
-    top: 6px;
-    left: 6px;
-    gap: 3px;
-  }
-
-  .product-badge,
-  .discount-badge {
-    padding: 5px 6px;
-    font-size: 6px;
-  }
-
-  .wishlist-float {
-    width: 44px;
-    height: 44px;
-    top: 8px;
-    right: 8px;
-  }
-
-  .wishlist-float svg {
-    width: 18px;
-    height: 18px;
-  }
-
   .quick-add {
     display: none
   }
@@ -7611,37 +7667,11 @@ button {
   }
 
   .luxe-feature {
-    height: 570px
-  }
-
-  .luxe-feature>.smart-image img {
-    object-position: 59% 28%
-  }
-
-  .luxe-feature-overlay {
-    background: linear-gradient(0deg, rgba(13, 14, 12, .78), rgba(13, 14, 12, .1) 80%)
+    min-height: min(133vw, 640px)
   }
 
   .luxe-feature-content {
-    left: 21px;
-    right: 18px;
-    top: auto;
-    bottom: 57px;
-    transform: none
-  }
-
-  .luxe-feature-content .eyebrow {
-    margin-bottom: 14px
-  }
-
-  .luxe-feature-content h2 {
-    font-size: clamp(48px, 12vw, 67px)
-  }
-
-  .luxe-feature-content p {
-    font-size: 11px;
-    line-height: 1.7;
-    margin: 16px 0 20px
+    padding: 0 44px 24px 21px
   }
 
   .luxe-feature-side {
@@ -9980,20 +10010,6 @@ button {
   }
 }
 
-.product-card-media .smart-image img {
-  object-fit: contain !important;
-  object-position: center center !important;
-  background: transparent !important;
-}
-
-@media(max-width:760px) {
-  .product-card-media .smart-image img {
-    object-fit: contain !important;
-    object-position: center center !important;
-    background: transparent !important;
-  }
-}
-
 /* Client-review QA refinements: gallery, review submission, compact collections, and CMS polish. */
 @media (min-width: 761px) {
   .product-gallery {
@@ -10667,33 +10683,6 @@ button {
     opacity: 1;
     transform: translateY(-50%);
   }
-}
-
-/* Uniform product card crops; split-panel bleed is trimmed from the local assets. */
-.product-card-media {
-  aspect-ratio: 1 / 1;
-  background: #ffffff;
-}
-
-.product-card-media .smart-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-}
-
-.product-card-media .smart-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain !important;
-  object-position: center center !important;
-  background: transparent !important;
-}
-
-.product-card-media .product-image-link {
-  position: absolute;
-  inset: 0;
 }
 
 /* Luxe masthead keeps the brand name visibly spaced at every viewport. */
@@ -13105,32 +13094,6 @@ button {
   }
 }
 
-/* Homepage product-card badges (scoped to .product-section, which only the homepage uses): larger, higher-contrast, same top-left stack. */
-.product-section .product-card-tags { top: 10px; left: 10px; gap: 5px; max-width: min(calc(100% - 20px), calc(100cqw - 70px - (100cqw - 100%) / 2)); }
-.product-section .product-badge,
-.product-section .discount-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 4px 10px;
-  border-radius: 2px;
-  font-size: 11.5px;
-  line-height: 1.25;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  overflow-wrap: normal;
-  word-break: normal;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .22);
-}
-.product-section .product-badge { background: var(--accent-light); color: var(--ink); border: 1px solid rgba(186, 132, 82, .55); }
-.product-section .discount-badge { background: var(--ink); color: #fff; border: 1px solid rgba(231, 212, 187, .55); }
-@media (max-width: 760px) {
-  .product-section .product-card-tags { top: 7px; left: 7px; gap: 4px; max-width: min(calc(100% - 14px), calc(100cqw - 58px - (100cqw - 100%) / 2)); }
-  .product-section .product-badge,
-  .product-section .discount-badge { min-height: 23px; padding: 3px 8px; font-size: 10px; letter-spacing: .07em; }
-}
-
 /* Products catalogue: the empty / zero-results message sits in the middle of the results area only (below the search and filters). */
 .admin-product-list.is-empty {
   display: flex;
@@ -13146,10 +13109,10 @@ button {
 }
 
 /* Admin preview of the homepage Luxe band: the same markup and styles as the storefront, at a smaller size inside the editor card. */
-.lf-preview { border: 1px solid #e3e0d9; overflow: hidden; border-radius: 2px; }
-.lf-preview .luxe-feature { height: 340px; }
-.lf-preview .luxe-feature-content { left: 28px; }
-.lf-preview .luxe-feature-content h2 { font-size: clamp(30px, 4.2vw, 56px); }
+.lf-preview { border: 1px solid #e3e0d9; overflow: hidden; border-radius: 2px; container-type: inline-size; }
+/* Same height rule as the storefront band, computed from the preview's own width, so the picture is framed the way the page will frame it. */
+.lf-preview .luxe-feature { min-height: clamp(300px, 54cqw, 700px); }
+.lf-preview .luxe-feature-content { padding: 0 28px 24px; }
 .lf-preview .luxe-feature-side { right: 14px; bottom: 14px; }
 .lf-preview .button { pointer-events: none; }
 .lf-preview.is-hidden { opacity: .45; filter: grayscale(.6); }

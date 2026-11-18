@@ -36,8 +36,8 @@ async function call(method: string, path: string, body?: unknown) {
   const text = await response.text();
   return { status: response.status, body: text ? JSON.parse(text) : null };
 }
-const band = (over: Record<string, unknown> = {}) => ({ enabled: true, image: `${PREFIX}${NEW}`, imageAlt: 'Autumn edit', eyebrow: 'NEW SEASON', heading: 'AUTUMN\nEDIT', bodyLine1: 'Line one.', bodyLine2: 'Line two.', ctaLabel: 'SHOP NOW', ctaHref: '/collections/new-arrivals', ...over });
-const storedBand = (over: Record<string, unknown> = {}) => ({ enabled: true, image: OLD, imageAlt: 'Old', eyebrow: 'OLD', heading: 'OLD\nHEAD', bodyLine1: 'a', bodyLine2: 'b', ctaLabel: 'GO', ctaHref: '/collections/all', ...over });
+const band = (over: Record<string, unknown> = {}) => ({ enabled: true, image: `${PREFIX}${NEW}`, imageAlt: 'Autumn edit', description: 'Autumn is here.', ctaLabel: 'SHOP NOW', ctaHref: '/collections/new-arrivals', ...over });
+const storedBand = (over: Record<string, unknown> = {}) => ({ enabled: true, image: OLD, imageAlt: 'Old', description: 'Old text', ctaLabel: 'GO', ctaHref: '/collections/all', ...over });
 
 beforeEach(() => {
   use(createFakeLuxeDb({ migrated: true }));
@@ -86,10 +86,34 @@ describe('saving persists every field and the homepage data follows', () => {
     const storefront = await call('GET', '/content/storefront');
     expect(storefront.body.luxeFeature).toEqual(band()); // the public homepage reads the latest saved values, no deployment needed
   });
-  it('saves the visibility switch and a cleared eyebrow / description', async () => {
-    await call('PUT', '/admin/content/luxe-feature', band({ enabled: false, eyebrow: '', bodyLine1: '', bodyLine2: '' }));
+  it('saves the visibility switch', async () => {
+    await call('PUT', '/admin/content/luxe-feature', band({ enabled: false }));
     const out = (await call('GET', '/content/storefront')).body.luxeFeature;
-    expect(out).toMatchObject({ enabled: false, eyebrow: '', bodyLine1: '', bodyLine2: '' });
+    expect(out).toMatchObject({ enabled: false });
+  });
+  it('saves with no alt text (empty or absent) and keeps a provided one', async () => {
+    const { imageAlt: _omit, ...noAlt } = band();
+    for (const body of [band({ imageAlt: '' }), noAlt]) {
+      const saved = await call('PUT', '/admin/content/luxe-feature', body);
+      expect(saved.status).toBe(200);
+      expect(saved.body.imageAlt).toBe('');
+      expect(fake().settings.luxe_feature.imageAlt).toBe('');
+    }
+    expect((await call('PUT', '/admin/content/luxe-feature', band({ imageAlt: 'Autumn edit' }))).body.imageAlt).toBe('Autumn edit');
+  });
+  it('saves a visible description, returns it publicly, keeps it separate from alt text, and an empty one is stored as empty', async () => {
+    const saved = await call('PUT', '/admin/content/luxe-feature', band({ imageAlt: 'alt only', description: 'Seen by customers' }));
+    expect(saved.body).toMatchObject({ imageAlt: 'alt only', description: 'Seen by customers' });
+    expect((await call('GET', '/content/storefront')).body.luxeFeature).toMatchObject({ imageAlt: 'alt only', description: 'Seen by customers' });
+    const cleared = await call('PUT', '/admin/content/luxe-feature', band({ description: '' }));
+    expect(cleared.status).toBe(200);
+    expect(fake().settings.luxe_feature.description).toBe('');
+    expect((await call('PUT', '/admin/content/luxe-feature', band({ description: 'x'.repeat(301) }))).status).toBe(422);
+  });
+  it('an older client that still sends heading / eyebrow / description is accepted, and that text is not stored', async () => {
+    const saved = await call('PUT', '/admin/content/luxe-feature', band({ eyebrow: 'X', heading: 'Y', bodyLine1: 'a', bodyLine2: 'b' }));
+    expect(saved.status).toBe(200);
+    expect(Object.keys(fake().settings.luxe_feature).sort()).toEqual(['ctaHref', 'ctaLabel', 'description', 'enabled', 'image', 'imageAlt']);
   });
   it('an explicit empty picture is saved as empty (the storefront then falls back to the banner still)', async () => {
     use(createFakeLuxeDb({ migrated: true, luxe: storedBand(), storedFiles: [OLD] }));
@@ -99,7 +123,7 @@ describe('saving persists every field and the homepage data follows', () => {
     expect((await call('GET', '/content/storefront')).body.luxeFeature.image).toBe('');
   });
   it('rejects invalid input without saving anything', async () => {
-    for (const bad of [band({ heading: '' }), band({ ctaLabel: '' }), band({ ctaHref: 'https://evil.example/' }), band({ ctaHref: '//evil.example' }), band({ image: 'javascript:alert(1)' }), band({ heading: 'x'.repeat(101) })]) {
+    for (const bad of [band({ ctaLabel: '' }), band({ ctaHref: 'https://evil.example/' }), band({ ctaHref: '//evil.example' }), band({ image: 'javascript:alert(1)' }), band({ imageAlt: 'x'.repeat(161) })]) {
       const r = await call('PUT', '/admin/content/luxe-feature', bad);
       expect(r.status).toBe(422);
     }

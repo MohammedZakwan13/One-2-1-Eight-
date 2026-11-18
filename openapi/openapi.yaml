@@ -1615,16 +1615,13 @@ components:
         updatedAt: { type: number }
     LuxeFeature:
       type: object
-      description: The homepage "THE PRIVATE EDIT" band. image may be empty (the band then reuses a banner still). eyebrow and the two description lines may be empty and are then not shown.
-      required: [enabled, image, imageAlt, eyebrow, heading, bodyLine1, bodyLine2, ctaLabel, ctaHref]
+      description: The homepage "THE PRIVATE EDIT" band, a picture and a button. image may be empty (the band then reuses a banner still). imageAlt is accessibility-only and optional (empty or absent means a decorative picture). description is optional text shown to customers below the picture.
+      required: [enabled, image, ctaLabel, ctaHref]
       properties:
         enabled: { type: boolean }
         image: { $ref: '#/components/schemas/OptionalImageUrl' }
-        imageAlt: { type: string, maxLength: 160 }
-        eyebrow: { type: string, maxLength: 60 }
-        heading: { type: string, minLength: 1, maxLength: 100, description: A line break splits the plain first line from the italic accent line }
-        bodyLine1: { type: string, maxLength: 120 }
-        bodyLine2: { type: string, maxLength: 120 }
+        imageAlt: { type: string, maxLength: 160, default: '' }
+        description: { type: string, maxLength: 300, default: '', description: Visible text below the picture; empty renders nothing }
         ctaLabel: { type: string, minLength: 1, maxLength: 40 }
         ctaHref: { type: string, maxLength: 512, pattern: '^/(?!/)\S*$', description: Site-relative path }
     AdminLuxeFeature:
