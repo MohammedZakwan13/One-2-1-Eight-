@@ -13,6 +13,7 @@ export function useProductGallery(productId: string, count: number) {
   if (state.id !== productId) setState({ id: productId, index: 0 });
   const index = galleryIndex(state, productId, count);
   const swipe = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
+  const swipedAt = useRef(0);
 
   const select = useCallback((target: number) => setState(gallerySelect(productId, count, target)), [productId, count]);
   const go = useCallback((delta: number) => { if (count > 1) setState(current => galleryGo(current, productId, count, delta)); }, [productId, count]);
@@ -20,8 +21,9 @@ export function useProductGallery(productId: string, count: number) {
   /** For the main image: a swipe with a finger or a pen. The element has `touch-action: pan-y`, so vertical scrolling stays with the browser. */
   const mainProps = {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
-      // A mouse never swipes; a touch that starts on a button (the heart, the arrows) belongs to that button.
-      if (count < 2 || event.pointerType === 'mouse' || (event.target as HTMLElement).closest('button')) { swipe.current = null; return; }
+      // A mouse never swipes; a touch that starts on a button (the heart, the arrows) belongs to that button. The full-screen-zoom trigger covers the whole picture, so a
+      // touch on it is the start of a swipe (the click that may follow it is ignored, see justSwiped).
+      if (count < 2 || event.pointerType === 'mouse' || (event.target as HTMLElement).closest('button:not(.gallery-zoom-trigger)')) { swipe.current = null; return; }
       swipe.current = { id: event.pointerId, x: event.clientX, y: event.clientY, at: event.timeStamp };
     },
     onPointerUp: (event: PointerEvent<HTMLElement>) => {
@@ -29,7 +31,7 @@ export function useProductGallery(productId: string, count: number) {
       swipe.current = null;
       if (!start || start.id !== event.pointerId) return;
       const delta = gallerySwipeDelta({ dx: event.clientX - start.x, dy: event.clientY - start.y, ms: event.timeStamp - start.at });
-      if (delta) go(delta);
+      if (delta) { swipedAt.current = event.timeStamp; go(delta); }
     },
     onPointerCancel: () => { swipe.current = null; }, // the browser took the gesture over (a vertical scroll)
   };
@@ -44,5 +46,8 @@ export function useProductGallery(productId: string, count: number) {
     },
   };
 
-  return { index, count, select, go, mainProps, sectionProps };
+  /** True once, right after a swipe: the browser may still fire a click at the end of the finger movement, which must not open the zoom viewer. */
+  const justSwiped = useCallback(() => { const recent = swipedAt.current > 0 && performance.now() - swipedAt.current < 450; swipedAt.current = 0; return recent; }, []);
+
+  return { index, count, select, go, mainProps, sectionProps, justSwiped };
 }

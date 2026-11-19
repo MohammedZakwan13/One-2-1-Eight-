@@ -136,7 +136,7 @@ describe('swipe', () => {
     expect(mainProps).not.toContain('preventDefault');
     expect(mainProps).toContain('onPointerCancel'); // a browser-taken scroll cancels the gesture
     expect(mainProps).toContain("event.pointerType === 'mouse'");
-    expect(mainProps).toContain("closest('button')"); // a touch on the heart or an arrow is never a swipe
+    expect(mainProps).toContain("closest('button:not(.gallery-zoom-trigger)')"); // a touch on the heart or an arrow is never a swipe; the picture's own zoom button is where swipes start
   });
 });
 
@@ -182,11 +182,14 @@ describe('the rest of the product page is untouched', () => {
     expect(page).toContain('className="gallery-mobile-dots"');
     expect(page).toContain('aria-label="Save product"');
     expect(page).toContain('className="gallery-image-number"');
-    expect(page).toContain('<SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager onNaturalSize={onImageSize} />'); // main image: same loading priority (eager); it now also reports its size so the box can hug the picture
+    expect(page).toContain('<SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager className={fitClass(currentImage)} onNaturalSize={(width, height) => noteRatio(currentImage, width, height)} />'); // main image: same loading priority (eager), inside the full-screen-zoom button; the FRAME never depends on the picture, only how the picture sits in it
   });
-  it('there is no zoom or lightbox in the gallery (none existed), and none was added', () => {
-    expect(page).not.toMatch(/lightbox|zoom/i);
-    expect(readFileSync('lib/hooks/use-product-gallery.ts', 'utf8')).not.toMatch(/lightbox|zoom/i);
+  it('the full-screen zoom is its own component; the gallery hook only keeps a swipe from also opening it', () => {
+    expect(page).toContain('<ImageZoomViewer');
+    expect(page).toContain('className="gallery-zoom-trigger"');
+    const hook = readFileSync('lib/hooks/use-product-gallery.ts', 'utf8');
+    expect(hook).toContain('justSwiped');
+    expect(hook).not.toMatch(/ImageZoomViewer|wheel|pinch|transform/i); // no zoom logic leaked into the hook
   });
   it('purchase, size, colour, review and recommendation code is still there', () => {
     for (const marker of ['const add = (goToCheckout = false)', 'id="size-picker"', 'detail-colour-block', 'onToggleWishlist(product.id)', 'checkDelivery', 'submitReview', 'ProductGrid']) expect(page, marker).toContain(marker);

@@ -145,12 +145,18 @@ describe('product page wiring (source guards)', () => {
   const route = norm('app/(storefront)/products/[slug]/page.tsx');
   const css = norm('app/globals.css');
 
-  it('Wishlist and Share live together in one overlay container INSIDE the image box, heart first, away from the gallery arrows', () => {
+  it('Wishlist stays in the image overlay; Share moved OUT of the picture to the heading row, behind a customer-only guard', () => {
     const main = page.indexOf('<div className="gallery-main"');
     const actions = page.indexOf('<div className="gallery-actions">');
     expect(actions).toBeGreaterThan(main); expect(actions).toBeLessThan(page.indexOf('gallery-arrow-prev'));
-    expect(page.indexOf('gallery-wishlist')).toBeGreaterThan(actions); expect(page.indexOf('<ProductShare payload={sharePayload} />')).toBeGreaterThan(page.indexOf('gallery-wishlist'));
-    expect(page.slice(actions, page.indexOf('</div>', actions))).toContain('onToggleWishlist(product.id)'); // the wishlist handler is exactly the existing one
+    const overlay = page.slice(actions, page.indexOf('</div>', actions));
+    expect(overlay).toContain('onToggleWishlist(product.id)'); // the wishlist handler is exactly the existing one
+    expect(overlay).not.toContain('ProductShare'); // no share button inside the picture any more
+    const label = page.indexOf('<div className="detail-label-row">');
+    expect(page.indexOf('<ProductShare payload={sharePayload} beforeShare={beforeShare} />')).toBeGreaterThan(label);
+    expect(page.indexOf('<ProductShare')).toBeLessThan(page.indexOf('<h1>{product.name}</h1>')); // beside the heading, before the title
+    expect(page).toContain("router.push(loginUrl(`/products/${product.slug}`))"); // a guest goes to the existing sign-in with this product as the way back
+    expect(page).toContain('if (customer) return true;');
   });
   it('the share payload comes from the real product (name, price, description, first image) and the canonical URL', () => {
     expect(page).toContain('productSharePayload({'); for (const field of ['slug: product.slug', 'name: product.name', 'price: product.price', 'description: product.description', 'image: product.images[0]']) expect(page).toContain(field);
@@ -178,15 +184,13 @@ describe('product page wiring (source guards)', () => {
     expect(route).toContain("twitter: { card: 'summary_large_image', title: `${product.name} | ${settings.brandName}`, description: shareDescription, ...(image ? { images: [image] } : {}) }");
     expect(route).toContain('product.images[0] || heroSlides[0]?.desktopImage'); expect(route).toContain("if (!product) return { title: 'Product not found', robots: { index: false } }");
   });
-  it('the buttons float top-right INSIDE the image box: 44px circles, 22px icons, 16px from the corner, 8px apart; the image box is the size of the image area', () => {
+  it('the wishlist floats top-right inside the picture (44px circle on desktop); the frame is ONE fixed 2:3 shape that no longer follows the loaded picture', () => {
     expect(css).toMatch(/\.gallery-actions \{\n  position: absolute;\n  top: 16px;\n  right: 16px;[^}]*flex-direction: column;\n  gap: 8px;/);
-    expect(css).toMatch(/\.gallery-wishlist, \.gallery-share \{\n  width: 44px;\n  height: 44px;/); expect(css).toMatch(/border-radius: 50%;\n  box-shadow: 0 2px 10px/);
+    expect(css).toMatch(/\.gallery-wishlist \{\n  position: relative;\n  width: 44px;\n  height: 44px;/); expect(css).toMatch(/border-radius: 50%;\n  box-shadow: 0 2px 10px/);
     expect(page).toContain('<Heart size={22}'); expect(component).toContain('<Share2 size={22}');
-    expect(css).toMatch(/\.gallery-main \{\n  position: relative;[^}]*aspect-ratio: var\(--gallery-ratio, 1\);\n  width: min\(100%, calc\(580px \* var\(--gallery-ratio, 1\)\)\);\n  margin-inline: auto;/); // the box hugs the picture: no empty gutter
-    expect(css.match(/width: min\(100%, calc\(580px \* var\(--gallery-ratio, 1\)\)\);/g)!.length).toBe(3); // base rule + the two later desktop layout rules that used to force 100%
-    expect(css).toContain('width: min(100%, calc(min(88vw, 440px) * var(--gallery-ratio, 1)));'); expect(css).toMatch(/\.gallery-actions \{\n    top: 12px;\n    right: 12px;/);
-    expect(page).toContain("'--gallery-ratio': imageRatio"); expect(page).toContain('onNaturalSize={onImageSize}');
-    expect(css).toContain('.gallery-wishlist:active, .gallery-share:active'); expect(css).toContain('.gallery-wishlist:focus-visible, .gallery-share:focus-visible');
+    expect(css).toMatch(/\.gallery-main \{\n  position: relative;[^}]*aspect-ratio: 2 \/ 3;\n  width: min\(100%, calc\(min\(78vh, 740px\) \* 2 \/ 3\)\);\n  margin-inline: auto;/);
+    expect(css).not.toContain('--gallery-ratio'); expect(page).not.toContain('imageRatio'); expect(page).not.toContain('--gallery-ratio'); // the frame never follows a picture (onNaturalSize is now used only to pick each picture's fit, see lib/gallery-fit.ts)
+    expect(css).toContain('.gallery-wishlist:active'); expect(css).toContain('.gallery-wishlist:focus-visible, .detail-share:focus-visible');
   });
   it('the menu becomes a bottom sheet on phones so it can never overflow the viewport', () => {
     expect(css).toMatch(/@media \(max-width: 760px\) \{\n  \.share-backdrop \{ display: block;[^\n]*\n  \.share-popover \{ left: 8px !important; right: 8px; top: auto !important; bottom: 8px;/);

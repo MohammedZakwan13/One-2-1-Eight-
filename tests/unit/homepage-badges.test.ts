@@ -87,7 +87,8 @@ describe('product detail BUY NOW button colour', () => {
   });
   it('leaves Add to Bag styling and the Buy Now handler alone', () => {
     const page = readFileSync('components/storefront/pages/product-detail-page.tsx', 'utf8');
-    expect(page).toContain('className="button buy-now-button" onClick={() => add(true)}');
+    expect(page).toContain('className="button buy-now-button inline-purchase" onClick={() => add(true)}'); // same handler; also the in-page copy hidden on phones
+    expect(page).toContain('className="button buy-now-button mobile-sticky-now" onClick={() => add(true)}'); // the phone bar uses the very same handler
     expect(css).not.toMatch(/add-to-bag[^{]*\{[^}]*buy-now-blue/);
   });
 });

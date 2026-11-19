@@ -85,18 +85,18 @@ button {
 }
 
 .route-screen {
-  animation: screenIn .32s ease both
+  /* Opacity only, never a transform: a transform on this element (even a leftover translateY(0)) makes it the containing block of every position: fixed
+     descendant, which pinned the mobile purchase bar to the end of the page - during the entrance and, with fill-mode both, for good afterwards. */
+  animation: screenIn .32s ease backwards
 }
 
 @keyframes screenIn {
   from {
-    opacity: .76;
-    transform: translateY(4px)
+    opacity: .76
   }
 
   to {
-    opacity: 1;
-    transform: translateY(0)
+    opacity: 1
   }
 }
 
@@ -2605,13 +2605,13 @@ button {
 
 .gallery-main {
   position: relative;
-  /* The box is exactly the picture: its aspect ratio is the image's own (set from the loaded image, 1 until then), capped at 580px tall, so the floating
-     controls always sit on the picture's corner and never in an empty gutter. */
-  aspect-ratio: var(--gallery-ratio, 1);
-  width: min(100%, calc(580px * var(--gallery-ratio, 1)));
+  /* ONE frame shape for every picture of the product: 2:3 portrait (the catalogue's apparel photos are 2:3), never changing when another view is selected.
+     `contain` (below) keeps the whole garment visible; a picture of another shape sits inside the frame with quiet bars instead of being cropped. The height
+     is capped to the viewport so the whole frame fits on a desktop screen. */
+  aspect-ratio: 2 / 3;
+  width: min(100%, calc(min(78vh, 740px) * 2 / 3));
   margin-inline: auto;
-  max-height: 580px;
-  background: transparent;
+  background: #f1efe9;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -2625,6 +2625,39 @@ button {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* Fit per picture (lib/gallery-fit.ts). The frame above never changes shape. A picture close to 2:3 (including a near-square close-up) FILLS it, trimming a
+   little from the sides, so every view looks the same size; a far-off picture (landscape) keeps the contain rule above and stays whole. The full-screen viewer
+   always shows the complete, uncropped picture. */
+.gallery-main .smart-image.gallery-fit-fill img,
+.gallery-thumbnails button .smart-image.gallery-fit-fill img {
+  object-fit: cover;
+  object-position: center center;
+}
+
+/* The whole picture is the button that opens the full-screen viewer. The wishlist, counter and arrows sit above it. */
+.gallery-zoom-trigger {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gallery-zoom-trigger:focus-visible {
+  outline: 2px solid var(--ink, #161715);
+  outline-offset: -4px;
+}
+
+.gallery-zoom-trigger:disabled {
+  cursor: default;
 }
 
 .gallery-main .smart-image img {
@@ -2654,8 +2687,7 @@ button {
   padding: 0 4px;
 }
 
-/* Wishlist + Share: floating controls in the top-right corner INSIDE the product image box (.gallery-main is the positioning reference and is exactly
-   the size of the image area, see the width rule above). Stacked, 44px circles with 22px icons. */
+/* Wishlist: the only control left on the picture, in its top-right corner (the share button now sits beside the product heading). */
 .gallery-actions {
   position: absolute;
   top: 16px;
@@ -2666,7 +2698,8 @@ button {
   gap: 8px;
 }
 
-.gallery-wishlist, .gallery-share {
+.gallery-wishlist {
+  position: relative;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -2685,27 +2718,70 @@ button {
   transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.gallery-wishlist:hover, .gallery-share:hover {
+.gallery-wishlist:hover {
   transform: scale(1.06);
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(17, 17, 17, 0.2);
 }
 
-.gallery-share:hover {
-  color: #8a6a2c;
-}
-
-.gallery-wishlist:active, .gallery-share:active {
+.gallery-wishlist:active {
   transform: scale(0.94);
 }
 
-.gallery-wishlist:focus-visible, .gallery-share:focus-visible, .share-option:focus-visible, .share-back:focus-visible, .share-link-field:focus-visible {
+.gallery-wishlist:focus-visible, .detail-share:focus-visible, .share-option:focus-visible, .share-back:focus-visible, .share-link-field:focus-visible {
   outline: 2px solid #b8913f;
   outline-offset: 2px;
 }
 
 .gallery-wishlist.is-saved {
   color: #a44438;
+}
+
+/* Share: a compact circle at the right end of the heading's label row (next to the badge). 40px visible, 44px touch target. */
+.detail-label-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.detail-share {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  border-radius: 50%;
+  color: var(--ink, #111111);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.detail-share::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+}
+
+.detail-share svg {
+  width: 18px;
+  height: 18px;
+}
+
+.detail-share:hover {
+  transform: scale(1.06);
+  color: #8a6a2c;
+  border-color: rgba(138, 106, 44, 0.5);
+}
+
+.detail-share:active {
+  transform: scale(0.94);
 }
 
 /* Share menu: rendered in a portal and positioned from the button, so the image box (overflow: hidden) can never clip it. */
@@ -2742,8 +2818,8 @@ button {
   position: relative;
   padding: 0;
   border: 1px solid #e8e8e8;
-  background: transparent;
-  aspect-ratio: 1/1;
+  background: #f1efe9;
+  aspect-ratio: 2 / 3;
   min-width: 0;
   overflow: hidden;
   cursor: pointer;
@@ -8092,7 +8168,7 @@ button {
 
   /* Mobile product detail */
   .product-page {
-    padding: 0 0 130px
+    padding: 0 0 194px
   }
 
   .product-breadcrumbs {
@@ -8118,15 +8194,40 @@ button {
     box-shadow: none;
   }
 
+  /* Phones: the 2:3 frame uses the full screen width. (A phone held sideways is capped to its height, so the frame still fits.) */
   .gallery-main {
-    aspect-ratio: var(--gallery-ratio, 1);
-    max-height: min(88vw, 440px);
-    width: min(100%, calc(min(88vw, 440px) * var(--gallery-ratio, 1)));
-    margin-inline: auto;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .gallery-actions {
+    top: 10px;
+    right: 10px;
+  }
+
+  @media (orientation: landscape) {
+    .gallery-main {
+      width: min(100%, calc(80vh * 2 / 3));
+      margin-inline: auto;
+    }
+  }
+
+  /* Wishlist on phones: a 40px circle with a 20px heart; the invisible ring keeps the touch target at 44px. */
+  .gallery-wishlist {
+    width: 40px;
+    height: 40px;
+  }
+
+  .gallery-wishlist::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+  }
+
+  .gallery-wishlist svg {
+    width: 20px;
+    height: 20px;
   }
 
   .gallery-main .smart-image img {
@@ -8141,11 +8242,6 @@ button {
     font-size: 8px
   }
 
-  .gallery-actions {
-    top: 12px;
-    right: 12px;
-  }
-
   .gallery-thumbnails {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -8154,9 +8250,8 @@ button {
   }
 
   .gallery-thumbnails button {
-    aspect-ratio: 1/1;
-    max-height: 111px;
-    background: transparent;
+    aspect-ratio: 2 / 3;
+    background: #f1efe9;
     border: 1px solid #e8e8e8;
   }
 
@@ -8337,6 +8432,7 @@ button {
     font-size: 28px
   }
 
+  /* The purchase bar: fixed above the bottom navigation, visible as soon as the page opens, with both actions. */
   .mobile-sticky-buy {
     position: fixed;
     z-index: 45;
@@ -8348,43 +8444,134 @@ button {
     border-top: 1px solid var(--line);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 10px 16px;
-    min-height: 61px
+    gap: 8px;
+    padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    min-height: 60px
   }
 
-  .mobile-sticky-buy>div {
+  /* Price block: the selling price first and largest, the original price struck through beside it, and below them a subtle discount badge with the saving. */
+  .mobile-sticky-info {
     display: flex;
     flex-direction: column;
-    gap: 3px
+    gap: 3px;
+    min-width: 0;
+    flex: 0 0 auto;
+    margin-right: 2px
   }
 
-  .mobile-sticky-buy>div span {
-    font-size: 14px;
-    font-weight: 700
+  .sticky-price {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap
   }
 
-  .mobile-sticky-buy>div small {
+  .sticky-price strong {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1
+  }
+
+  .sticky-price del {
+    font-size: 10px;
+    color: #9d9c93
+  }
+
+  .mobile-sticky-info small {
     font-size: 8px;
-    color: #818279
+    color: #818279;
+    white-space: nowrap
   }
 
-  .mobile-sticky-buy>button {
-    border: 0;
-    background: var(--ink);
-    color: white;
-    min-height: 41px;
-    padding: 0 16px;
+  /* Scroll-aware price (the bar's data-price attribute is set by one IntersectionObserver on the in-page price row). While that row is on screen the bar is
+     compact: price plus the size hint. Once it scrolls away the original price, badge and saving fade in. Both versions occupy the same space, so nothing shifts. */
+  .sticky-line {
+    display: grid
+  }
+
+  .sticky-line>small {
+    grid-area: 1 / 1;
+    transition: opacity .2s ease, visibility 0s linear 0s
+  }
+
+  .sticky-hint {
+    opacity: 0;
+    visibility: hidden
+  }
+
+  .sticky-price del {
+    transition: opacity .2s ease, visibility 0s linear 0s
+  }
+
+  .mobile-sticky-buy[data-price="compact"] .sticky-price del,
+  .mobile-sticky-buy[data-price="compact"] .sticky-save {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s ease, visibility 0s linear .2s
+  }
+
+  .mobile-sticky-buy[data-price="compact"] .sticky-hint {
+    opacity: 1;
+    visibility: visible
+  }
+
+  .sticky-save {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 12px;
-    font-size: 8px;
+    gap: 4px
+  }
+
+  .sticky-off {
+    padding: 2px 4px;
+    background: #f0e4d5;
+    color: #90683f;
+    font-size: 7px;
     font-weight: 700;
-    letter-spacing: .1em;
-    flex: 1;
-    max-width: 230px
+    letter-spacing: .05em;
+    line-height: 1.2
+  }
+
+  .sticky-save em {
+    font-style: normal;
+    font-size: 8.5px;
+    font-weight: 600;
+    color: #2f7a4b
+  }
+
+  .mobile-sticky-buy .button {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 8px;
+    justify-content: center;
+    font-size: 10px;
+    letter-spacing: .09em;
+    white-space: nowrap
+  }
+
+  .mobile-sticky-buy .button:disabled {
+    opacity: .6;
+    cursor: not-allowed
+  }
+
+  /* The bar hides itself while the footer is in view (data-footer, set by an IntersectionObserver), so the footer only needs room for the bottom navigation. */
+  .product-page ~ .site-footer {
+    padding-bottom: 76px
+  }
+
+  .mobile-sticky-buy[data-footer="hide"] {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .15s ease, visibility 0s linear .15s
+  }
+
+  /* The in-page Add to bag / Buy now pair is replaced by the bar on phones. */
+  .product-detail-panel .inline-purchase {
+    display: none
   }
 
   .product-page .reviews-section {
@@ -8669,38 +8856,14 @@ button {
     min-height: auto
   }
 
+  /* Phones: the campaign image is dropped so the sign-in form is on screen straight away (desktop and tablet keep the two-column layout). */
   .login-editorial {
-    min-height: 360px;
-    height: 45svh;
-    max-height: 480px
-  }
-
-  .login-editorial-copy {
-    left: 22px;
-    bottom: 24px
-  }
-
-  .login-editorial-copy .eyebrow {
-    font-size: 7px;
-    margin-bottom: 11px
-  }
-
-  .login-editorial-copy h1 {
-    font-size: 48px
-  }
-
-  .login-editorial-copy p {
-    font-size: 10px;
-    margin: 11px 0 18px
-  }
-
-  .editorial-bottom {
-    padding-top: 10px;
-    font-size: 7px
+    display: none
   }
 
   .login-panel-wrap {
-    padding: 27px 19px 27px
+    padding: 16px 16px 24px;
+    justify-content: flex-start
   }
 
   .login-panel {
@@ -8709,8 +8872,8 @@ button {
   }
 
   .login-brand {
-    gap: 12px;
-    margin-bottom: 25px
+    gap: 8px;
+    margin-bottom: 16px
   }
 
   .login-panel>h2 {
@@ -8719,7 +8882,7 @@ button {
 
   .login-panel>p {
     font-size: 10px;
-    margin-bottom: 22px
+    margin-bottom: 16px
   }
 
   .login-back-link {
@@ -9543,7 +9706,7 @@ button {
   }
 
   .product-page {
-    padding-bottom: 125px
+    padding-bottom: 189px
   }
 
   .product-detail-panel {
@@ -10027,14 +10190,12 @@ button {
   .product-gallery.has-thumbnails .gallery-main {
     grid-column: 2;
     grid-row: 1;
-    width: min(100%, calc(580px * var(--gallery-ratio, 1)));
     margin-inline: auto;
   }
 
   .product-gallery.single-image .gallery-main {
     grid-column: 1;
     grid-row: 1;
-    width: min(100%, calc(580px * var(--gallery-ratio, 1)));
     margin-inline: auto;
   }
 
@@ -10052,9 +10213,9 @@ button {
   .gallery-thumbnails button {
     flex: 0 0 auto;
     width: 100%;
-    aspect-ratio: 1/1;
+    aspect-ratio: 2 / 3;
     max-height: none;
-    background: transparent;
+    background: #f1efe9;
     border: 1px solid #e8e8e8;
     border-radius: 0;
   }
@@ -13094,6 +13255,13 @@ button {
   }
 }
 
+/* Phones swipe the picture (and the thumbnails select it): no previous / next arrows. Desktop and tablets keep them. This comes after the arrow rules above so it wins. */
+@media (max-width: 760px) {
+  .gallery-arrow {
+    display: none;
+  }
+}
+
 /* Products catalogue: the empty / zero-results message sits in the middle of the results area only (below the search and filters). */
 .admin-product-list.is-empty {
   display: flex;
@@ -13159,3 +13327,219 @@ button {
 .hb-video-facts dd { margin: 0; }
 .hb-video-summary dd { color: #3f5a3c; }
 .hb-note p.is-warning { color: #8a4b00; font-weight: 600; }
+
+/* ───────────── Product detail: full-screen image viewer ───────────── */
+.zoom-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  background: #f8f7f3;
+  color: var(--ink, #161715);
+  overscroll-behavior: contain;
+}
+
+.zoom-thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 12px;
+  overflow-y: auto;
+  border-right: 1px solid #e4e0d6;
+}
+
+.zoom-thumbs button {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  padding: 0;
+  border: 1px solid #e4e0d6;
+  background: #f1efe9;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.zoom-thumbs button.active {
+  border-color: var(--ink, #161715);
+  box-shadow: 0 0 0 1px var(--ink, #161715);
+}
+
+.zoom-thumbs button:focus-visible,
+.zoom-close:focus-visible,
+.zoom-arrow:focus-visible,
+.zoom-toolbar button:focus-visible {
+  outline: 2px solid #b8913f;
+  outline-offset: 2px;
+}
+
+.zoom-thumbs img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoom-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.zoom-stage {
+  position: absolute;
+  inset: 0;
+  /* One definite grid cell the size of the stage: the picture's max-width / max-height percentages resolve against it, so it is always fitted. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: zoom-in;
+}
+
+.zoom-stage.is-zoomed {
+  cursor: grab;
+}
+
+.zoom-stage.is-dragging {
+  cursor: grabbing;
+}
+
+/* The picture is fitted: as large as fits inside the stage at its own proportions, never cropped, never stretched. */
+.zoom-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform .18s ease;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.zoom-stage.is-dragging .zoom-image {
+  transition: none;
+}
+
+.zoom-counter {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  font-size: 11px;
+  letter-spacing: .16em;
+  color: #55564e;
+}
+
+.zoom-counter i {
+  font-style: normal;
+  padding: 0 4px;
+  color: #acaba3;
+}
+
+.zoom-close,
+.zoom-arrow,
+.zoom-toolbar button {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(22, 23, 21, .16);
+  background: rgba(255, 255, 255, .94);
+  color: var(--ink, #161715);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.zoom-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.zoom-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  margin-top: -23px;
+  border-radius: 50%;
+}
+
+.zoom-arrow-prev {
+  left: 14px;
+}
+
+.zoom-arrow-next {
+  right: 14px;
+}
+
+.zoom-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
+.zoom-toolbar button {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.zoom-toolbar button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .zoom-viewer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  /* Phones: thumbnails run along the bottom; swiping and pinching replace the arrows and the zoom buttons. */
+  .zoom-thumbs {
+    grid-row: 2;
+    flex-direction: row;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-top: 1px solid #e4e0d6;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .zoom-thumbs button {
+    width: 52px;
+  }
+
+  .zoom-main {
+    grid-row: 1;
+  }
+
+  .zoom-arrow,
+  .zoom-toolbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticky-line>small,
+  .sticky-price del,
+  .zoom-image,
+  .gallery-wishlist,
+  .detail-share {
+    transition: none;
+  }
+}
