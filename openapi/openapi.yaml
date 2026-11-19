@@ -1043,6 +1043,7 @@ components:
         stockMessage: { type: [string, 'null'], maxLength: 160, description: "Admin-written display text for the product page. Public responses return it only when `stockMessageMode` is `real` (text shown after the real quantity) or `custom`. Pure copy: never derived from, or used as, inventory." }
         stockMessageMode: { type: string, enum: [none, real, custom], description: "`real`: the product page shows the selected size's ACTUAL stock (`variants[].availability.quantity`) followed by `stockMessage`. `custom`: the page shows the admin-entered `stockMessageNumber` + `stockMessage` as promotional text; it is NOT inventory. `none`: no extra message. Absent on legacy data." }
         stockMessageNumber: { type: [integer, 'null'], minimum: 0, maximum: 100000, description: "Promotional display number. Only ever non-null when `stockMessageMode` is `custom`. Never inventory: it does not affect availability, cart limits, checkout or Low Stock." }
+        sizeGuide: { oneOf: [{ $ref: '#/components/schemas/SizeGuide' }, { type: 'null' }], description: "The product's own size guide (customer-facing measurements). The storefront receives it only when enabled; absent means the storefront shows the generic guide. Never linked to variants or stock." }
         variants: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Variant' } }
         updatedAt: { type: string, format: date-time }
     ProductList:
@@ -1430,6 +1431,15 @@ components:
         - type: object
           required: [stock]
           properties: { stock: { type: integer, minimum: 0 } }
+    SizeGuide:
+      type: object
+      description: Customer-facing garment measurements for one product. Informational only; independent of inventory.
+      required: [enabled, unit, columns, rows]
+      properties:
+        enabled: { type: boolean, description: When false the storefront shows the generic size guide }
+        unit: { type: string, enum: [in, cm] }
+        columns: { type: array, minItems: 1, maxItems: 8, items: { type: object, required: [key, label], properties: { key: { type: string, pattern: '^[a-z0-9_]{1,12}$' }, label: { type: string, minLength: 1, maxLength: 24 } } } }
+        rows: { type: array, minItems: 1, maxItems: 12, items: { type: object, required: [size, values], properties: { size: { type: string, minLength: 1, maxLength: 16, description: Label only; not an inventory size }, values: { type: object, additionalProperties: { type: string, maxLength: 20 } } } } }
     AdminProduct:
       allOf:
         - $ref: '#/components/schemas/Product'
@@ -1460,6 +1470,7 @@ components:
         stockMessage: { type: [string, 'null'], maxLength: 160, description: "Display text. In `real`/`custom` mode it must not state a quantity or scarcity (e.g. \"3 left\", \"Only 2 remaining\", \"Last piece\"): 422 validation_failed." }
         stockMessageMode: { type: string, enum: [none, real, custom], description: "Exactly one mode. Omitted = unchanged." }
         stockMessageNumber: { type: [integer, 'null'], minimum: 0, maximum: 100000, description: "Custom display number. Allowed ONLY with `stockMessageMode: custom` (otherwise 422); the database clears it for `real` and `none`. Never inventory." }
+        sizeGuide: { oneOf: [{ $ref: '#/components/schemas/SizeGuide' }, { type: 'null' }], description: "Omitted: leave the saved guide untouched. An object: create or replace it (saved together with the product in one transaction). null: explicitly remove it. Never affects variants, SKUs or stock." }
         name: { type: string }
         slug: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
         categoryId: { type: string }

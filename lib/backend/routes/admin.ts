@@ -15,7 +15,7 @@ import {
   HttpError, MEDIA_BUCKET, authClient, csv, db, imageUrl, isStoragePath, isUnique, isUuid, json, must, newToken, pageParams, rateLimit, removeStorageObjects, route, sha256,
   storedImage, storedLuxeImage,
 } from '@/lib/backend/core';
-import { ORDER_SELECT, PRODUCT_SELECT, getSettingsRow, loadOrder, orderMailData, toAdminProduct, toLuxeFeature, toOrder, toProducts, toSettings, type Row } from '@/lib/backend/data';
+import { ORDER_SELECT, PRODUCT_SELECT, getSettingsRow, sizeGuidesFor, loadOrder, orderMailData, toAdminProduct, toLuxeFeature, toOrder, toProducts, toSettings, type Row } from '@/lib/backend/data';
 import { sendOrderEmail, sendReturnEmail } from '@/lib/backend/integrations';
 import { presentOrders, toReturnDto, trackingUrl } from '@/lib/backend/returns';
 import { cleanupBannerVideos } from '@/lib/backend/routes/hero-banners';
@@ -97,7 +97,8 @@ async function adminProductById(id: string) {
   const [{ data }, settings] = await Promise.all([db().from('products').select(PRODUCT_SELECT).eq('id', id).maybeSingle(), getSettingsRow()]);
   if (!data) throw new HttpError(404, 'not_found', 'Product not found.');
   const [pub] = await toProducts([data], settings);
-  return toAdminProduct(data, settings, pub);
+  const guide = (await sizeGuidesFor([id])).get(id);
+  return { ...toAdminProduct(data, settings, pub), ...(guide ? { sizeGuide: guide } : {}) };
 }
 
 async function saveProduct(input: z.infer<typeof adminProductInputSchema>, adminId: string, id?: string) {
@@ -134,8 +135,17 @@ async function saveProduct(input: z.infer<typeof adminProductInputSchema>, admin
   const oldImages: string[] = id ? ((await db().from('products').select('images').eq('id', id).maybeSingle()).data?.images ?? []) : [];
   // Omitted images on an update keep the stored ones; an explicit empty array removes them all.
   const images = resolveProductImages(input.images, oldImages.map(imageUrl));
-  const { data, error } = await db().rpc('save_product', { p: productPayload(input, id, images), p_actor: adminId });
+  // Without a size-guide instruction this is exactly the original save_product call. With one, the wrapper saves product and guide in ONE transaction (it calls the unchanged save_product).
+  // sizeGuide: undefined = leave the guide alone, an object = create / replace, null = explicit removal.
+  const guideInstruction = input.sizeGuide !== undefined;
+  const { data, error } = guideInstruction
+    ? await db().rpc('save_product_with_size_guide', { p: productPayload(input, id, images), p_actor: adminId, p_guide: input.sizeGuide ?? null, p_remove: input.sizeGuide === null })
+    : await db().rpc('save_product', { p: productPayload(input, id, images), p_actor: adminId });
   if (error) {
+    if (guideInstruction && (error.code === 'PGRST202' || error.code === '42883' || /save_product_with_size_guide/.test(error.message ?? '') && /not find|does not exist/.test(error.message ?? ''))) {
+      throw new HttpError(503, 'migration_required', 'Size guides need database migration 0014. Ask the developer to apply it. Nothing was saved.');
+    }
+    if ((error.message ?? '').includes('invalid_size_guide')) throw new HttpError(422, 'validation_failed', 'The size guide is not valid. Nothing was saved.', { sizeGuide: ['Invalid size guide'] });
     if (isUnique(error, 'products_slug_key')) throw new HttpError(409, 'slug_taken', 'Another product already uses that URL slug.', { slug: ['Slug already in use'] });
     if (isUnique(error, 'sku')) throw new HttpError(409, 'sku_taken', 'A SKU is already used by another product.', { variants: ['SKU already in use'] });
     if (error.code === '23503') throw new HttpError(422, 'validation_failed', 'Unknown category.', { categoryId: ['Unknown category'] });
@@ -173,7 +183,8 @@ route('GET', '/admin/products', async ctx => {
   if (error) throw new HttpError(500, 'server_error', 'Something went wrong.');
   const rows = (data ?? []) as Row[];
   const pub = await toProducts(rows, settings);
-  return { items: rows.map((row, index) => toAdminProduct(row, settings, pub[index])), total: count ?? 0, page, pageSize };
+  const guides = await sizeGuidesFor(rows.map(row => row.id));
+  return { items: rows.map((row, index) => ({ ...toAdminProduct(row, settings, pub[index]), ...(guides.has(row.id) ? { sizeGuide: guides.get(row.id) } : {}) })), total: count ?? 0, page, pageSize };
 });
 route('POST', '/admin/products/bulk-flags', async ctx => {
   await requireAdmin(ctx, 'catalog');

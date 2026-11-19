@@ -15,6 +15,7 @@ import { adminProductToDraft, SIZE_OPTIONS, type AdminProductDraft } from '@/lib
 import { money, slugify } from '@/lib/format';
 import { ComboInput } from '@/components/admin/combo-input';
 import { NumberInput } from '@/components/admin/number-input';
+import { SizeGuideEditor } from '@/components/admin/size-guide-editor';
 import { lowStockSizesOfProduct, planStockSave, type StockMessageMode } from '@/lib/inventory';
 import { blankProductDraft, editorAfterSuccessfulSave, saveSuccessMessage, upsertProduct } from '@/lib/product-editor';
 import { COLOR_SWATCHES, colorToHex, FIT_OPTIONS, MATERIAL_OPTIONS, matchesMerchFilters, MERCH_FILTERS, type MerchFlag } from '@/lib/product-options';
@@ -101,6 +102,8 @@ export function AdminProducts() {
       badge: draft.badge || null, images: draft.images, fit: draft.fit, material: draft.material, description: draft.description,
       bestSeller: draft.bestSeller, newArrival: draft.newArrival, luxe: draft.luxe, status: draft.status, stockMessage: draft.stockMessage, stockMessageMode: draft.stockMessageMode, stockMessageNumber: draft.stockMessageMode === 'custom' && draft.stockMessageNumber.trim() !== '' ? Number(draft.stockMessageNumber) : null,
       returnable: draft.returnable, exchangeable: draft.exchangeable, codEnabled: draft.codEnabled, onlinePaymentEnabled: draft.onlinePaymentEnabled,
+      // Size guide: omitted unless the admin changed it; null only when they explicitly removed a saved guide. Independent of the stock fields below.
+      ...(draft.sizeGuideRemoved ? { sizeGuide: null } : draft.sizeGuideDirty && draft.sizeGuide ? { sizeGuide: draft.sizeGuide } : {}),
       ...(stockPlan.send ? { variants: stockPlan.variants, ...(stockPlan.expectedStock ? { expectedStock: stockPlan.expectedStock } : {}) } : {}),
     });
     if (!parsed.success) { setFormErrors(parsed.error.issues.map(issue => `${issue.path.join('.') || 'form'}: ${issue.message}`)); return; }
@@ -125,6 +128,9 @@ export function AdminProducts() {
             <div className="admin-form-three"><label>Price (₹)<NumberInput min="0" step="1" value={draft.price} onChange={e => patch('price', Number(e.target.value))} /></label><label>Compare-at (₹)<NumberInput min="0" step="1" value={draft.compareAt} onChange={e => patch('compareAt', Number(e.target.value))} /></label><label>Status<select value={draft.status} onChange={e => patch('status', e.target.value as Draft['status'])}><option value="active">Active (visible)</option><option value="draft">Draft (hidden)</option></select></label></div>
             <fieldset className="admin-feature-flags"><legend>Merchandising</legend>{[{ key: 'bestSeller', label: 'Best seller' }, { key: 'newArrival', label: 'New arrival' }, { key: 'luxe', label: 'Luxe collection' }].map(item => <label key={item.key}><input type="checkbox" checked={Boolean(draft[item.key as 'bestSeller'])} onChange={e => patch(item.key as 'bestSeller', e.target.checked)} />{item.label}</label>)}</fieldset>
             <fieldset className="admin-feature-flags admin-size-stock"><legend>Real stock by size (leave blank if the size is not offered)</legend>{SIZE_OPTIONS.map(size => <label key={size}>{size}<NumberInput min="0" step="1" value={draft.stock[size]} onChange={e => patch('stock', { ...draft.stock, [size]: e.target.value })} aria-label={`Stock for size ${size}`} /></label>)}</fieldset>
+            <SizeGuideEditor guide={draft.sizeGuide} category={categories.find(category => category.id === draft.categoryId) ?? null} savedExists={Boolean(draft.id && selected?.sizeGuide)} removed={draft.sizeGuideRemoved}
+              onEdit={next => setDraft(current => (current ? { ...current, sizeGuide: next, sizeGuideDirty: true, sizeGuideRemoved: false } : current))}
+              onRemove={() => setDraft(current => (current ? { ...current, sizeGuide: null, sizeGuideDirty: false, sizeGuideRemoved: Boolean(current.id && selected?.sizeGuide) } : current))} />
             <fieldset className="admin-feature-flags"><legend>Returns & Exchanges</legend>
               <label className="admin-check"><input type="checkbox" checked={draft.returnable} onChange={e => patch('returnable', e.target.checked)} /> Returnable product</label>
               <label className="admin-check"><input type="checkbox" checked={draft.exchangeable} onChange={e => patch('exchangeable', e.target.checked)} /> Exchangeable product</label>

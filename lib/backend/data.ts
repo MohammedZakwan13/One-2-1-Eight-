@@ -2,6 +2,7 @@
 import 'server-only';
 import { luxeFeatureSchema, type AdminProduct, type Cart, type LuxeFeature, type Order, type Product, type StoreSettings } from '@/lib/api/schemas';
 import { getServerEnv } from '@/lib/env';
+import { sizeGuideFromRow, type SizeGuide } from '@/lib/size-guide';
 import { HttpError, db, imageUrl, must, trackingUrl } from '@/lib/backend/core';
 
 export type Row = Record<string, any>;
@@ -70,6 +71,19 @@ export async function reviewStats(productIds: string[]) {
     stats.set(r.product_id, entry);
   }
   return stats;
+}
+
+/** Size guides for these products (a separate lookup: PRODUCT_SELECT stays untouched). Never throws: a missing table or any failure means "no guide", so the generic guide is shown. */
+export async function sizeGuidesFor(productIds: string[]): Promise<Map<string, SizeGuide>> {
+  const guides = new Map<string, SizeGuide>();
+  if (!productIds.length) return guides;
+  const { data, error } = await db().from('product_size_guides').select('product_id, enabled, unit, columns, rows').in('product_id', productIds);
+  if (error) {
+    if (error.code !== '42P01' && error.code !== 'PGRST205') console.error('[backend] size guides', error.message);
+    return guides;
+  }
+  for (const row of (data ?? []) as Row[]) { const guide = sizeGuideFromRow(row); if (guide) guides.set(row.product_id, guide); }
+  return guides;
 }
 
 export async function toProducts(rows: Row[], settings: Row): Promise<Product[]> {
