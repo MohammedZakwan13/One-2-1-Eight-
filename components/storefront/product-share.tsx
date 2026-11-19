@@ -25,12 +25,12 @@ type View = 'menu' | 'instagram';
 type Position = { top: number; left: number; maxHeight: number } | null;
 
 /**
- * The Share button for the product page's image overlay. Touch devices with Web Share support open the phone's own share sheet (with the real product
+ * The Share button, shown beside the product heading (customers only: the page passes beforeShare). Touch devices with Web Share support open the phone's own share sheet (with the real product
  * image where files can be shared); everywhere else a compact menu opens: Copy link, Copy product details, WhatsApp, Facebook, Instagram (image download +
  * caption, because Instagram has no web share link), Email. The menu is rendered in a portal and positioned from the button, so the image container's
  * overflow can never clip it, and it becomes a bottom sheet on phones.
  */
-export function ProductShare({ payload }: { payload: SharePayload }) {
+export function ProductShare({ payload, beforeShare }: { payload: SharePayload; /** Runs first on every tap. Returning false stops the share (the product page uses it to send guests to sign in). */ beforeShare?: () => boolean }) {
   const { notify } = useUi();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('menu');
@@ -122,6 +122,7 @@ export function ProductShare({ payload }: { payload: SharePayload }) {
   const onTrigger = async () => {
     if (busy.current) return; // one share action at a time: a second tap while the sheet is open does nothing
     if (open) { close(); return; }
+    if (beforeShare && !beforeShare()) return; // not allowed (a guest): nothing is shared and no dialog opens
     busy.current = true;
     try { if (!(await nativeShare(false))) setOpen(true); } finally { busy.current = false; }
   };
@@ -147,7 +148,7 @@ export function ProductShare({ payload }: { payload: SharePayload }) {
   const closeAfter = () => close(false);
 
   return <>
-    <button ref={trigger} type="button" className="gallery-share" onClick={() => void onTrigger()} aria-label={`Share ${payload.name}`} aria-haspopup="dialog" aria-expanded={open}>
+    <button ref={trigger} type="button" className="detail-share" onClick={() => void onTrigger()} aria-label={`Share ${payload.name}`} aria-haspopup="dialog" aria-expanded={open}>
       <Share2 size={22} aria-hidden="true" />
     </button>
     <span className="visually-hidden" role="status" aria-live="polite">{copied === 'link' ? 'Product link copied' : copied === 'details' ? 'Product details copied' : copied === 'caption' ? 'Caption copied' : ''}</span>

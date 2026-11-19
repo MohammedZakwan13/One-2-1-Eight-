@@ -12,6 +12,8 @@ export const isSoldOut = (product: Product) => product.variants.every(variant =>
 export const variantForSize = (product: Product, size: string): Variant | undefined => product.variants.find(variant => variant.size === size);
 export const hasCompareAt = (product: Product) => product.compareAt > product.price;
 export const discountPercent = (product: Product) => (hasCompareAt(product) ? Math.round((1 - product.price / product.compareAt) * 100) : 0);
+/** What the customer saves, in rupees: the same "is there a discount" rule as discountPercent, so the two can never disagree. 0 when there is no discount. */
+export const savingsAmount = (product: Product) => (hasCompareAt(product) ? product.compareAt - product.price : 0);
 
 /** Narrow type guard for collections handled by the API (vs. category slugs). */
 export const COLLECTION_SLUGS = ['best-sellers', 'new-arrivals', 'one-2-1-eight-luxe', 'layering-edit'] as const;
