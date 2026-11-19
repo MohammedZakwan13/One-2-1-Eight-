@@ -5,6 +5,7 @@ export const blankProductDraft = (categoryId: string): AdminProductDraft => ({
   name: '', slug: '', categoryId, price: 999, compareAt: 0, color: 'Black', colorHex: '#242424', badge: '', images: [], stockMessage: '', stockMessageMode: 'none', stockMessageNumber: '', stockMessageReview: false,
   returnable: true, exchangeable: true, codEnabled: true, onlinePaymentEnabled: true, fit: 'Regular fit', material: '100% Cotton', description: '', bestSeller: false, newArrival: true, luxe: false, status: 'active',
   stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, size === 'XXL' ? '' : '10'])),
+  sizeGuide: null, sizeGuideDirty: false, sizeGuideRemoved: false,
 });
 
 export type EditorState = { selectedId: string; showForm: boolean; draft: AdminProductDraft; errors: string[] };

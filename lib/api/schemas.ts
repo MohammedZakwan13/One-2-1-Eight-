@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sizeGuideSchema } from '@/lib/size-guide';
 import { parseTrackingUrl } from '@/lib/tracking-url';
 import { stockTextError } from '@/lib/inventory';
 import { effectiveMediaType } from '@/lib/hero-media';
@@ -88,6 +89,8 @@ export const productSchema = z.object({
   /** Whether Online Payment (UPI, Card) is allowed for this product. */
   onlinePaymentEnabled: z.boolean().optional(),
   variants: z.array(variantSchema).min(1),
+  /** The product's own size guide (customer-facing measurements; never linked to variants or stock). The storefront receives it only when enabled. */
+  sizeGuide: sizeGuideSchema.nullish(),
   updatedAt: isoDateTime,
 });
 export type Product = z.infer<typeof productSchema>;
@@ -476,6 +479,8 @@ export const adminProductInputSchema = z.object({
   luxe: z.boolean(),
   status: z.enum(['active', 'draft']),
   stockMessage: z.string().trim().max(160).nullish(),
+  /** Omitted = leave the saved guide untouched. An object = create / replace it. null = remove it (deletion is always explicit). */
+  sizeGuide: sizeGuideSchema.nullish(),
   stockMessageMode: z.enum(['none', 'real', 'custom']).optional(),
   stockMessageNumber: z.number().int().min(0).max(100_000).nullish(),
   returnable: z.boolean().optional(),

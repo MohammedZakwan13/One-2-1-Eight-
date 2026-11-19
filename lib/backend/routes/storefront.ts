@@ -9,7 +9,7 @@ import {
   COOKIES, HttpError, bannerVideoUrl, db, imageUrl, isUnique, isUuid, json, must, newToken, pageParams, rateLimit, route, safeEqual, sha256, trackingToken,
 } from '@/lib/backend/core';
 import {
-  MAX_LINE_QUANTITY, ORDER_SELECT, PRODUCT_SELECT, applyCoupon, availability, getSettingsRow, loadOrder, orderMailData, paymentMethods, priceCart, reviewStats, selectRelated,
+  MAX_LINE_QUANTITY, ORDER_SELECT, PRODUCT_SELECT, applyCoupon, sizeGuidesFor, availability, getSettingsRow, loadOrder, orderMailData, paymentMethods, priceCart, reviewStats, selectRelated,
   toLuxeFeature, toOrder, toProducts, toSettings, limitedAvailabilityMessage, rowStockMode, type Row,
 } from '@/lib/backend/data';
 import { isCancellable, presentOrders, trackingUrl } from '@/lib/backend/returns';
@@ -108,7 +108,10 @@ async function activeProduct(slug: string): Promise<Row> {
 
 route('GET', '/products/:slug', async ({ params }) => {
   const [row, settings] = await Promise.all([activeProduct(params.slug), getSettingsRow()]);
-  return (await toProducts([row], settings))[0];
+  const product = (await toProducts([row], settings))[0]!;
+  // The product's own size guide, only when it is enabled (a disabled or missing guide means the storefront shows the generic one).
+  const guide = (await sizeGuidesFor([row.id])).get(row.id);
+  return guide?.enabled ? { ...product, sizeGuide: guide } : product;
 });
 
 route('GET', '/products/:slug/related', async ({ params, url }) => {

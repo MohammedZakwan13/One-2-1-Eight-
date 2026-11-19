@@ -1,5 +1,6 @@
 import type { AdminProduct, Category, Product, Variant } from '@/lib/api/schemas';
 import { effectiveStockMode, type StockMessageMode } from '@/lib/inventory';
+import type { SizeGuide } from '@/lib/size-guide';
 
 /** Category tiles/menus show exactly the categories the CMS marks active – no hard-coded exclusions. */
 export const isStorefrontCategory = (category: Category) => category.active;
@@ -25,6 +26,8 @@ export type AdminProductDraft = {
   images: string[]; stockMessage: string; stockMessageMode: StockMessageMode; stockMessageNumber: string; stockMessageReview: boolean; returnable: boolean; exchangeable: boolean; codEnabled: boolean; onlinePaymentEnabled: boolean;
   fit: string; material: string; description: string; bestSeller: boolean; newArrival: boolean; luxe: boolean;
   status: 'active' | 'draft'; stock: Record<string, string>;
+  /** Size guide editor state. Customer-facing measurements only; independent of `stock` and the variants. Sent to the server only when `sizeGuideDirty` / `sizeGuideRemoved`. */
+  sizeGuide: SizeGuide | null; sizeGuideDirty: boolean; sizeGuideRemoved: boolean;
 };
 
 export const adminProductToDraft = (product: AdminProduct): AdminProductDraft => ({
@@ -38,4 +41,5 @@ export const adminProductToDraft = (product: AdminProduct): AdminProductDraft =>
   fit: product.fit, material: product.material, description: product.description,
   bestSeller: product.bestSeller, newArrival: product.newArrival, luxe: product.luxe, status: product.status,
   stock: Object.fromEntries(SIZE_OPTIONS.map(size => [size, String(product.variants.find(variant => variant.size === size)?.stock ?? '')])),
+  sizeGuide: product.sizeGuide ?? null, sizeGuideDirty: false, sizeGuideRemoved: false,
 });
