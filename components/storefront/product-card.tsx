@@ -5,6 +5,7 @@ import { effectiveStockMode, stockLine } from '@/lib/inventory';
 import { SmartImage } from '@/components/ui/smart-image';
 import { RouteLink } from '@/components/ui/route-link';
 import { money } from '@/lib/format';
+import { colourLabel } from '@/lib/colour-name';
 import type { Product } from '@/lib/api/schemas';
 import { discountPercent } from '@/lib/catalog';
 
@@ -17,6 +18,6 @@ export function ProductCard({ product, isSaved, onToggleWishlist, onTransition }
       <button className={`wishlist-float ${isSaved ? 'is-saved' : ''}`} aria-label={isSaved ? 'Remove from wishlist' : 'Add to wishlist'} aria-pressed={isSaved} onClick={() => onToggleWishlist(product.id, product.name)}><Heart size={20} fill={isSaved ? 'currentColor' : 'none'} strokeWidth={1.65} /></button>
       <RouteLink href={href} className="quick-add" onClick={onTransition}>VIEW PRODUCT <ArrowUpRight size={15} /></RouteLink>
     </div>
-    <div className="product-card-info"><div className="product-card-title-row"><RouteLink href={href} onClick={onTransition} className="product-card-name">{product.name}</RouteLink>{product.reviewCount > 0 && <span className="card-rating"><Star size={12} fill="currentColor" /> {product.rating.toFixed(1)}</span>}</div><div className="product-card-meta"><span>{product.color}</span><span>{product.variants.length} sizes</span></div><div className="product-price-row"><strong>{money(product.price)}</strong>{product.compareAt > product.price && <del>{money(product.compareAt)}</del>}</div>{effectiveStockMode(product) === 'custom' && stockLine('custom', product.stockMessage, undefined, product.stockMessageNumber) && <p className="product-card-stock-note"><span className="stock-note-tag">Note</span>{stockLine('custom', product.stockMessage, undefined, product.stockMessageNumber)}</p>}<div className="color-dot-row"><i style={{ background: product.colorHex }} /><span>+ curated colours</span></div></div>
+    <div className="product-card-info"><div className="product-card-title-row"><RouteLink href={href} onClick={onTransition} className="product-card-name">{product.name}</RouteLink>{product.reviewCount > 0 && <span className="card-rating"><Star size={12} fill="currentColor" /> {product.rating.toFixed(1)}</span>}</div><div className="product-card-meta"><span>{colourLabel(product.color)}</span><span>{product.variants.length} sizes</span></div><div className="product-price-row"><strong>{money(product.price)}</strong>{product.compareAt > product.price && <del>{money(product.compareAt)}</del>}</div>{effectiveStockMode(product) === 'custom' && stockLine('custom', product.stockMessage, undefined, product.stockMessageNumber) && <p className="product-card-stock-note"><span className="stock-note-tag">Note</span>{stockLine('custom', product.stockMessage, undefined, product.stockMessageNumber)}</p>}<div className="color-dot-row"><i style={{ background: product.colorHex }} /><span>+ curated colours</span></div></div>
   </article>;
 }
