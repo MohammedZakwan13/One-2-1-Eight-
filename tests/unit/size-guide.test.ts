@@ -201,3 +201,56 @@ describe('category-based template suggestions', () => {
     }
   });
 });
+
+describe('migration 0014 hardening (source guards; behaviour is verified against local Supabase)', () => {
+  const sql = read('supabase/migrations/0014_product_size_guides.sql').replace(/--.*$/gm, '');
+  it('one shared validator, used by the table CHECK and by the save function, never returning null', () => {
+    expect(sql).toContain('create or replace function public.size_guide_valid(p_columns jsonb, p_rows jsonb)');
+    expect(sql).toContain('constraint product_size_guides_body_valid check (public.size_guide_valid(columns, rows))');
+    expect(sql).toContain('not public.size_guide_valid(p_guide->\'columns\', p_guide->\'rows\')');
+    expect(sql).toMatch(/jsonb_typeof\(c->'key'\) is distinct from 'string'/);
+    expect(sql).toMatch(/jsonb_typeof\(r->'values'\) is distinct from 'object'/);
+    expect(sql).toMatch(/jsonb_typeof\(val\) is distinct from 'string' or char_length\(val #>> '\{\}'\) > 20/);
+    expect(sql).toContain('if not (k = any (v_keys)) then return false; end if;'); // unknown measurement keys
+    expect(sql).toContain("(c->>'key') = any (v_keys)"); // duplicate keys
+    expect(sql).toContain('jsonb_array_length(p_columns) not between 1 and 8 or jsonb_array_length(p_rows) not between 1 and 12');
+  });
+  it('all three functions pin search_path with pg_temp last; the wrapper keeps four arguments and the explicit p_remove', () => {
+    expect(sql.match(/set search_path = public, pg_temp/g)?.length).toBe(3); // validator, completeness check and wrapper
+    expect(sql).toContain('create or replace function public.save_product_with_size_guide(p jsonb, p_actor uuid, p_guide jsonb, p_remove boolean default false)');
+    expect(sql).toContain("jsonb_typeof(p_guide) not in ('object', 'null')");
+    expect(sql).toContain('if coalesce(p_remove, false) then');
+    expect(sql).toContain('v_id := public.save_product(p, p_actor);');
+  });
+  it('permissions: service_role only on the wrapper and the validator; RLS on; no explicit transaction statements in the file', () => {
+    for (const signature of ['save_product_with_size_guide(jsonb, uuid, jsonb, boolean)', 'size_guide_valid(jsonb, jsonb)']) {
+      expect(sql).toContain(`revoke all on function public.${signature} from public, anon, authenticated;`);
+      expect(sql).toContain(`grant execute on function public.${signature} to service_role;`);
+    }
+    expect(sql).toContain('alter table public.product_size_guides enable row level security;');
+    expect(sql).not.toMatch(/^\s*(begin|commit)\s*;/im);
+  });
+});
+
+describe('migration 0014: enabled guides must be complete in the database too (disabled ones may stay blank)', () => {
+  const sql = read('supabase/migrations/0014_product_size_guides.sql').replace(/--.*$/gm, '');
+  it('a completeness function, a table CHECK that applies only when enabled, and the same rule inside the save function', () => {
+    expect(sql).toContain('create or replace function public.size_guide_complete(p_columns jsonb, p_rows jsonb)');
+    expect(sql).toContain('if not public.size_guide_valid(p_columns, p_rows) then return false; end if;');
+    expect(sql).toMatch(/jsonb_typeof\(r->'values'->\(c->>'key'\)\) is distinct from 'string' or char_length\(btrim\(r->'values'->>\(c->>'key'\)\)\) < 1/);
+    expect(sql).toContain('constraint product_size_guides_complete_when_enabled check (not enabled or public.size_guide_complete(columns, rows))');
+    expect(sql).toContain("((p_guide->>'enabled')::boolean and not public.size_guide_complete(p_guide->'columns', p_guide->'rows'))");
+  });
+  it('is created before the table that uses it, and has service_role-only permissions', () => {
+    expect(sql.indexOf('function public.size_guide_valid')).toBeLessThan(sql.indexOf('function public.size_guide_complete'));
+    expect(sql.indexOf('function public.size_guide_complete')).toBeLessThan(sql.indexOf('create table if not exists public.product_size_guides'));
+    expect(sql).toContain('revoke all on function public.size_guide_complete(jsonb, jsonb) from public, anon, authenticated;');
+    expect(sql).toContain('grant execute on function public.size_guide_complete(jsonb, jsonb) to service_role;');
+  });
+  it('the database rule matches the application rule: the editor schema also demands every cell for an enabled guide and allows an unfinished disabled one', () => {
+    const base = { unit: 'in', columns: [{ key: 'c1', label: 'A' }], rows: [{ size: 'S', values: { c1: '' } }] } as const;
+    expect(sizeGuideSchema.safeParse({ ...base, enabled: true }).success).toBe(false);
+    expect(sizeGuideSchema.safeParse({ ...base, enabled: false }).success).toBe(true);
+    expect(sizeGuideSchema.safeParse({ ...base, enabled: true, rows: [{ size: 'S', values: { c1: '36' } }] }).success).toBe(true);
+  });
+});
