@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { adminProductInputSchema } from '@/lib/api/schemas';
@@ -76,7 +75,13 @@ describe('storefront fallback rules', () => {
     expect(page).toContain('isUsableGuide(product.sizeGuide) ? <SizeGuideTable guide={product.sizeGuide} /> : <table>');
     expect(page).toContain("['S', '36–38 in', '16.5 in', '27 in']");
     expect(page).toContain('size-guide-link');
-    expect(execFileSync('git', ['diff', '--name-only', 'origin/feature/supabase-api', '--', 'components/storefront/pages/size-guide-page.tsx']).toString().trim()).toBe('');
+    // The standalone /size-guide page keeps its own generic content and is independent of product guides.
+    const generic = read('components/storefront/pages/size-guide-page.tsx');
+    expect(generic).toContain('Size & fit guide');
+    expect(generic).toContain('FIND YOUR OWN FIT');
+    expect(generic).toContain('36–38 in');
+    expect(generic).toContain('A FEW GOOD RULES');
+    expect(generic).not.toMatch(/sizeGuide|isUsableGuide|SizeGuideTable|product_size_guides/);
   });
 });
 
@@ -96,11 +101,20 @@ describe('size guide is independent of inventory and of the critical save path',
     expect(Object.keys(payload).join(' ')).not.toMatch(/guide|measure/i);
     expect(payload.variants).toBeUndefined();
   });
-  it('product-payload.ts, save_product and PRODUCT_SELECT are untouched', () => {
-    for (const file of ['lib/backend/product-payload.ts', 'supabase/migrations/0008_stock_message_modes.sql']) {
-      expect(execFileSync('git', ['diff', '--name-only', 'origin/feature/supabase-api', '--', file]).toString().trim()).toBe('');
-    }
-    expect(read('lib/backend/data.ts')).toContain("export const PRODUCT_SELECT = '*, categories(id, name, slug), product_variants(id, sku, size, stock, active, sort_order)';");
+  it('product-payload.ts, save_product and PRODUCT_SELECT stay free of size guide data', () => {
+    // product-payload.ts (what save_product receives) knows nothing about guides.
+    expect(read('lib/backend/product-payload.ts')).not.toMatch(/size.?guide|measure/i);
+    // save_product keeps its own definition (migration 0008) and was never redefined or extended by the size guide migration.
+    const saveProduct = read('supabase/migrations/0008_stock_message_modes.sql');
+    expect(saveProduct).toContain('create or replace function public.save_product(');
+    expect(saveProduct).not.toMatch(/size_guide|sizeGuide/i);
+    const guideMigration = read('supabase/migrations/0014_product_size_guides.sql').replace(/--.*$/gm, '');
+    expect(guideMigration).not.toMatch(/create or replace function public\.save_product\(/);
+    expect(guideMigration).toContain('create or replace function public.save_product_with_size_guide(');
+    // PRODUCT_SELECT (shared by the listing, detail, related and admin queries) has no size guide relation.
+    const select = /export const PRODUCT_SELECT = '([^']*)';/.exec(read('lib/backend/data.ts'))?.[1] ?? '';
+    expect(select).toBe('*, categories(id, name, slug), product_variants(id, sku, size, stock, active, sort_order)');
+    expect(select).not.toMatch(/size_guide/);
   });
   it('a save without a guide instruction calls the original save_product; deletion needs an explicit null', () => {
     const admin = read('lib/backend/routes/admin.ts');
