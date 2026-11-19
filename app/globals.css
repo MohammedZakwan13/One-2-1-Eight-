@@ -8851,6 +8851,22 @@ button {
     font-size: 23px
   }
 
+  /* Product-card badges on phones: compact (15px tall, 7.5px text) and slightly tighter, so they cover less of the photograph (desktop and the container rule above are untouched). */
+  .product-card-tags {
+    gap: 3px
+  }
+
+  .product-badge,
+  .discount-badge {
+    min-height: 15px;
+    padding: 0 6px;
+    font-size: 7.5px
+  }
+
+  .discount-badge {
+    padding: 0 5px
+  }
+
   .login-page {
     grid-template-columns: 1fr;
     min-height: auto
