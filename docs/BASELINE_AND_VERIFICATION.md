@@ -1,3 +1,5 @@
+> **Historical (pre-Supabase) record.** The mock API and Playwright journeys described below were removed; current QA evidence is in docs/IMPLEMENTATION_AND_QA.md.
+
 # Baseline audit & verification record
 
 ## Phase 1 — baseline of the prototype (commit `a609b5c`, measured in a separate clone)

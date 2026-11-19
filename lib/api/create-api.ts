@@ -5,6 +5,7 @@ import { cartRepository } from '@/lib/api/repositories/cart';
 import { catalogRepository } from '@/lib/api/repositories/catalog';
 import { contentRepository } from '@/lib/api/repositories/content';
 import { ordersRepository } from '@/lib/api/repositories/orders';
+import { wishlistRepository } from '@/lib/api/repositories/wishlist';
 import { reviewsRepository } from '@/lib/api/repositories/reviews';
 
 export const createApi = (call: Caller) => ({
@@ -14,6 +15,7 @@ export const createApi = (call: Caller) => ({
   auth: authRepository(call),
   reviews: reviewsRepository(call),
   content: contentRepository(call),
+  wishlist: wishlistRepository(call),
   admin: adminRepository(call),
 });
 export type Api = ReturnType<typeof createApi>;

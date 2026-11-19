@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { Footer } from '@/components/storefront/footer';
 import { RouteLink } from '@/components/ui/route-link';
 import { getLegalPage } from '@/lib/api/queries';
-import { toParagraphs } from '@/lib/format';
+import { linkifyText, toParagraphs } from '@/lib/format';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -26,7 +26,7 @@ export default async function Page({ params }: Props) {
       <div className="breadcrumbs"><RouteLink href="/">Home</RouteLink><span>/</span><span>{page.title}</span></div>
       <span className="eyebrow">THE DETAILS MATTER</span>
       <h1>{page.title}</h1>
-      <div className="policy-lede">{toParagraphs(page.body).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+      <div className="policy-lede">{toParagraphs(page.body).map((paragraph, index) => <p key={index}>{linkifyText(paragraph).map((part, i) => part.href ? <a key={i} href={part.href} {...(part.href.startsWith('https://') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{part.text}</a> : part.text)}</p>)}</div>
       <p className="policy-lede"><small>Last updated {new Date(page.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</small></p>
     </main>
     <Footer />

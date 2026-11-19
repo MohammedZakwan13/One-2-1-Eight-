@@ -85,18 +85,18 @@ button {
 }
 
 .route-screen {
-  animation: screenIn .32s ease both
+  /* Opacity only, never a transform: a transform on this element (even a leftover translateY(0)) makes it the containing block of every position: fixed
+     descendant, which pinned the mobile purchase bar to the end of the page - during the entrance and, with fill-mode both, for good afterwards. */
+  animation: screenIn .32s ease backwards
 }
 
 @keyframes screenIn {
   from {
-    opacity: .76;
-    transform: translateY(4px)
+    opacity: .76
   }
 
   to {
-    opacity: 1;
-    transform: translateY(0)
+    opacity: 1
   }
 }
 
@@ -814,69 +814,204 @@ button {
 }
 
 .product-card {
-  min-width: 0
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
+/* Every product card photo frame is 3:4 portrait (apparel), and the photo fills it (cover). The same frame is used by every grid:
+   home rails, shop all, collections, search, related and wishlist. */
 .product-card-media {
   position: relative;
-  aspect-ratio: 3/4;
+  width: 100%;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  background: #e8e6e0
+  background: #f0eee8;
+  flex-shrink: 0;
 }
 
 .product-image-link {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: 100%
+  height: 100%;
 }
 
+.product-card-media .smart-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+/* Cover keeps the photo undistorted. The focal point sits near the top so a portrait photo loses its bottom edge (never the face) and a square photo is trimmed evenly left and right. */
 .product-card-media .smart-image img {
-  object-position: center 28%;
-  transition: transform .85s cubic-bezier(.2, .6, .2, 1)
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 15%;
+  background: transparent;
+  transition: transform .85s cubic-bezier(.2, .6, .2, 1);
 }
 
 .product-card:hover .product-card-media .smart-image img {
-  transform: scale(1.045)
+  transform: scale(1.045);
 }
 
+.product-card-media { container-type: size; }
+
+/* Badges (top-left) and the wishlist button (top-right) sit INSIDE the photo frame, which is the positioning container. They are out of flow, so the
+   frame keeps its exact 3:4 size and the card gains no extra height. The card is a named size container so the overlays adapt to the card width. */
+.product-card { container-type: inline-size; container-name: pcard; }
+
+.product-card-tags {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+/* Two badges stacked in the top-left corner at every width: NEW DROP on top, the discount directly underneath. Each label stays on one line and is never truncated. */
 .product-badge,
 .discount-badge {
-  position: absolute;
-  top: 12px;
-  left: 11px;
-  z-index: 2;
-  padding: 6px 8px;
-  background: rgba(248, 247, 243, .94);
-  font-size: 7px;
-  letter-spacing: .13em;
-  font-weight: 700
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 2px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+}
+
+.product-badge {
+  background: var(--accent-light);
+  color: var(--ink);
+  border: 1px solid rgba(186, 132, 82, .55);
 }
 
 .discount-badge {
-  top: 40px;
+  padding: 0 7px;
   background: var(--ink);
-  color: white
+  color: #fff;
+  border: 1px solid rgba(231, 212, 187, .55);
 }
 
+/* Wishlist: a 40px circle in the top-right corner on phones (42px on desktop). An invisible 2px ring around it keeps the touch target at 44px or more. */
 .wishlist-float {
   position: absolute;
-  top: 9px;
-  right: 8px;
-  z-index: 3;
-  background: rgba(248, 247, 243, .92);
-  border: 0;
-  width: 34px;
-  height: 34px;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 50%;
-  transition: color .2s, background .2s
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  color: var(--ink, #111111);
+  cursor: pointer;
+  transition: transform .18s ease, color .18s ease, background .18s ease, border-color .18s ease;
+}
+
+.wishlist-float::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+}
+
+.wishlist-float svg {
+  width: 19px;
+  height: 19px;
+  flex: none;
+}
+
+.wishlist-float:hover {
+  transform: scale(1.06);
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.wishlist-float:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: 2px;
 }
 
 .wishlist-float:hover,
 .wishlist-float.is-saved {
-  color: #9e4438
+  color: #9e4438;
+}
+
+.wishlist-float.is-saved {
+  border-color: rgba(158, 68, 56, .45);
+}
+
+/* Desktop: slightly larger overlays, same stacked arrangement. */
+@media (min-width: 761px) {
+  .product-card-tags {
+    top: 12px;
+    left: 12px;
+  }
+
+  .product-badge,
+  .discount-badge {
+    min-height: 30px;
+    font-size: 12px
+  }
+
+  .wishlist-float {
+    top: 12px;
+    right: 12px;
+    width: 42px;
+    height: 42px
+  }
+
+  .wishlist-float svg {
+    width: 20px;
+    height: 20px
+  }
+}
+
+/* Narrow cards (two per row on a small phone): a little closer to the corners and one step smaller, still stacked. */
+@container pcard (max-width: 205px) {
+  .product-card-tags {
+    top: 8px;
+    left: 8px
+  }
+
+  .product-badge,
+  .discount-badge {
+    padding: 0 7px;
+    font-size: 10px;
+    letter-spacing: .05em
+  }
+
+  .discount-badge {
+    padding: 0 6px
+  }
+
+  .wishlist-float {
+    top: 8px;
+    right: 8px
+  }
 }
 
 .quick-add {
@@ -1050,7 +1185,6 @@ button {
 
 .campaign-copy h2 em,
 .seller-intro h2 em,
-.luxe-feature-content h2 em,
 .login-editorial-copy h1 em,
 .admin-aside-copy h1 em,
 .checkout-title h1 em,
@@ -1098,62 +1232,65 @@ button {
 }
 
 .luxe-feature {
-  height: clamp(430px, 54vw, 700px);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: clamp(430px, 54vw, 700px);
   overflow: hidden;
-  background: #44423d;
+  background: #0d0e0c;
   color: white
 }
 
+/* Full-bleed hero: the picture covers the whole band. Same focal point as the original band (30%), which keeps the headline area of campaign artwork in view. */
 .luxe-feature>.smart-image {
   position: absolute;
   inset: 0
 }
 
 .luxe-feature>.smart-image img {
+  object-fit: cover;
   object-position: center 30%
 }
 
 .luxe-feature-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(13, 14, 12, .69), rgba(13, 14, 12, .18) 55%, rgba(13, 14, 12, .1)), linear-gradient(0deg, rgba(0, 0, 0, .3), transparent 40%)
+  pointer-events: none;
+  background: linear-gradient(0deg, rgba(8, 9, 8, .62), rgba(8, 9, 8, 0) 48%), linear-gradient(90deg, rgba(8, 9, 8, .4), rgba(8, 9, 8, 0) 55%)
 }
 
+/* Description and button belong to the hero: they sit together at the lower left. In normal flow, so a long description grows the band instead of overflowing it. */
 .luxe-feature-content {
-  position: absolute;
-  left: var(--page-pad);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 2
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  max-width: min(100%, 560px);
+  padding: 0 var(--page-pad) clamp(28px, 4vw, 52px)
 }
 
-.luxe-feature-content .eyebrow {
-  color: #ddd2c4;
-  margin-bottom: 17px
-}
-
-.luxe-feature-content h2 {
-  font: 600 clamp(42px, 6.5vw, 88px)/.92 var(--font-display);
-  letter-spacing: -.07em;
-  margin: 0
-}
-
-.luxe-feature-content h2 em {
-  color: #e5c6a1
-}
-
-.luxe-feature-content p {
+.luxe-feature-description {
+  max-width: 22rem;
+  margin: 0;
   font-size: 13px;
   line-height: 1.8;
-  color: rgba(255, 255, 255, .8);
-  margin: 21px 0 28px
+  color: rgba(255, 255, 255, .9);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, .65)
+}
+
+.luxe-feature-content .button {
+  max-width: 100%
 }
 
 .luxe-feature-side {
   position: absolute;
   right: var(--page-pad);
   bottom: 29px;
+  z-index: 2;
   writing-mode: vertical-rl;
   letter-spacing: .2em;
   font-size: 8px;
@@ -1545,6 +1682,26 @@ button {
   color: #c7d7c8;
   min-height: 42px;
   border-bottom: 1px solid #5b5d55
+}
+
+.footer-email-note {
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid #363831;
+  font-size: 9px;
+  line-height: 1.7;
+  letter-spacing: .03em;
+  color: #85867e
+}
+
+.footer-email-note a {
+  color: #acaca4;
+  text-decoration: underline;
+  text-underline-offset: 2px
+}
+
+.footer-email-note a:hover {
+  color: #e7e7df
 }
 
 .footer-bottom {
@@ -2439,20 +2596,79 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 11px;
-  min-width: 0
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .gallery-main {
   position: relative;
-  aspect-ratio: 4/4.7;
-  background: #e9e7e0;
-  overflow: hidden
+  /* ONE frame shape for every picture of the product: 2:3 portrait (the catalogue's apparel photos are 2:3), never changing when another view is selected.
+     `contain` (below) keeps the whole garment visible; a picture of another shape sits inside the frame with quiet bars instead of being cropped. The height
+     is capped to the viewport so the whole frame fits on a desktop screen. */
+  aspect-ratio: 2 / 3;
+  width: min(100%, calc(min(78vh, 740px) * 2 / 3));
+  margin-inline: auto;
+  background: #f1efe9;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.gallery-main .smart-image {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Fit per picture (lib/gallery-fit.ts). The frame above never changes shape. A picture close to 2:3 (including a near-square close-up) FILLS it, trimming a
+   little from the sides, so every view looks the same size; a far-off picture (landscape) keeps the contain rule above and stays whole. The full-screen viewer
+   always shows the complete, uncropped picture. */
+.gallery-main .smart-image.gallery-fit-fill img,
+.gallery-thumbnails button .smart-image.gallery-fit-fill img {
+  object-fit: cover;
+  object-position: center center;
+}
+
+/* The whole picture is the button that opens the full-screen viewer. The wishlist, counter and arrows sit above it. */
+.gallery-zoom-trigger {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gallery-zoom-trigger:focus-visible {
+  outline: 2px solid var(--ink, #161715);
+  outline-offset: -4px;
+}
+
+.gallery-zoom-trigger:disabled {
+  cursor: default;
 }
 
 .gallery-main .smart-image img {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  object-position: center top;
-  background: #e9e7e0;
+  object-position: center center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .gallery-image-number {
@@ -2462,55 +2678,159 @@ button {
   background: rgba(248, 247, 243, .87);
   padding: 7px 9px;
   font-size: 9px;
-  letter-spacing: .12em
+  letter-spacing: .12em;
 }
 
 .gallery-image-number i {
   color: #acaba3;
   font-style: normal;
-  padding: 0 4px
+  padding: 0 4px;
+}
+
+/* Wishlist: the only control left on the picture, in its top-right corner (the share button now sits beside the product heading). */
+.gallery-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .gallery-wishlist {
-  position: absolute;
-  top: 13px;
-  right: 13px;
-  width: 38px;
-  height: 38px;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(248, 247, 243, .9);
-  border: 0;
-  border-radius: 50%
+  background: rgba(250, 248, 243, 0.9);
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 50%;
+  box-shadow: 0 2px 10px rgba(17, 17, 17, 0.14);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--ink, #111111);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gallery-wishlist:hover {
+  transform: scale(1.06);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.2);
+}
+
+.gallery-wishlist:active {
+  transform: scale(0.94);
+}
+
+.gallery-wishlist:focus-visible, .detail-share:focus-visible, .share-option:focus-visible, .share-back:focus-visible, .share-link-field:focus-visible {
+  outline: 2px solid #b8913f;
+  outline-offset: 2px;
 }
 
 .gallery-wishlist.is-saved {
-  color: #a44438
+  color: #a44438;
+}
+
+/* Share: a compact circle at the right end of the heading's label row (next to the badge). 40px visible, 44px touch target. */
+.detail-label-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.detail-share {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  border-radius: 50%;
+  color: var(--ink, #111111);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.detail-share::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+}
+
+.detail-share svg {
+  width: 18px;
+  height: 18px;
+}
+
+.detail-share:hover {
+  transform: scale(1.06);
+  color: #8a6a2c;
+  border-color: rgba(138, 106, 44, 0.5);
+}
+
+.detail-share:active {
+  transform: scale(0.94);
+}
+
+/* Share menu: rendered in a portal and positioned from the button, so the image box (overflow: hidden) can never clip it. */
+.share-backdrop { display: none; }
+.share-popover {
+  position: fixed; z-index: 1000; width: 272px; padding: 10px; display: grid; gap: 2px; overflow-y: auto;
+  background: #faf8f3; color: #111111; border: 1px solid #d9cfba; box-shadow: 0 14px 34px rgba(17, 17, 17, 0.2);
+}
+.share-popover-title { margin: 0 4px 6px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #8a6a2c; }
+.share-option {
+  display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; background: transparent; border: 0; width: 100%;
+  color: #111111; font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer;
+}
+.share-option:hover { background: #111111; color: #f3e7c9; }
+.share-divider { height: 1px; margin: 4px 6px; background: #e4dccb; }
+.share-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; min-height: 34px; padding: 0 8px 0 4px; background: transparent; border: 0; font: inherit; font-size: 12px; color: #5c5849; cursor: pointer; }
+.share-steps { list-style: decimal; margin: 0 4px 8px; padding-left: 22px; font-size: 12.5px; line-height: 1.5; color: #3d3a30; }
+.share-steps li { margin-bottom: 3px; }
+.share-note { margin: 8px 4px 2px; font-size: 11.5px; line-height: 1.45; color: #6a6657; }
+.share-link-field { margin-top: 6px; width: 100%; padding: 8px; font: inherit; font-size: 12px; line-height: 1.4; border: 1px solid #d9cfba; background: #ffffff; color: #111111; resize: none; }
+@media (max-width: 760px) {
+  .share-backdrop { display: block; position: fixed; inset: 0; z-index: 999; background: rgba(17, 17, 17, 0.38); }
+  .share-popover { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto; max-height: min(72vh, 520px) !important; }
+  .share-option { min-height: 46px; font-size: 14px; }
 }
 
 .gallery-thumbnails {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px
+  gap: 8px;
 }
 
 .gallery-thumbnails button {
   position: relative;
   padding: 0;
-  border: 1px solid transparent;
-  background: #eeece6;
-  aspect-ratio: 4/5;
+  border: 1px solid #e8e8e8;
+  background: #f1efe9;
+  aspect-ratio: 2 / 3;
   min-width: 0;
-  overflow: hidden
+  overflow: hidden;
+  cursor: pointer;
 }
 
 .gallery-thumbnails button.active {
-  border-color: var(--ink)
+  border-color: var(--ink);
 }
 
 .gallery-thumbnails button .smart-image img {
-  object-fit: contain
+  object-fit: contain;
 }
 
 .gallery-thumbnails button>span {
@@ -4062,6 +4382,13 @@ button {
   font-size: 8px !important
 }
 
+.otp-status {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #3f5a3c;
+}
+
 .login-success .eyebrow {
   margin: 17px 0 7px
 }
@@ -4451,6 +4778,46 @@ button {
   font-size: 9px;
   color: #77786f;
   line-height: 1.7
+}
+
+.order-contact {
+  max-width: 530px;
+  margin: 18px auto 20px;
+  padding: 18px 16px;
+  background: #eeece5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  text-align: left
+}
+
+.order-contact svg {
+  color: var(--accent);
+  flex-shrink: 0
+}
+
+.order-contact>div {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px
+}
+
+.order-contact strong {
+  font-size: 12px
+}
+
+.order-contact span {
+  font-size: 10px;
+  color: #77786f;
+  line-height: 1.7
+}
+
+.order-contact-button {
+  flex: 1 1 100%;
+  justify-content: center;
+  text-align: center
 }
 
 .confirmation-actions {
@@ -7274,34 +7641,6 @@ button {
     gap: 25px 9px
   }
 
-  .product-card-media {
-    aspect-ratio: 3/4.1
-  }
-
-  .product-badge,
-  .discount-badge {
-    top: 7px;
-    left: 7px;
-    padding: 5px 6px;
-    font-size: 6px
-  }
-
-  .discount-badge {
-    top: 29px
-  }
-
-  .wishlist-float {
-    width: 29px;
-    height: 29px;
-    top: 6px;
-    right: 6px
-  }
-
-  .wishlist-float svg {
-    width: 16px;
-    height: 16px
-  }
-
   .quick-add {
     display: none
   }
@@ -7404,37 +7743,11 @@ button {
   }
 
   .luxe-feature {
-    height: 570px
-  }
-
-  .luxe-feature>.smart-image img {
-    object-position: 59% 28%
-  }
-
-  .luxe-feature-overlay {
-    background: linear-gradient(0deg, rgba(13, 14, 12, .78), rgba(13, 14, 12, .1) 80%)
+    min-height: min(133vw, 640px)
   }
 
   .luxe-feature-content {
-    left: 21px;
-    right: 18px;
-    top: auto;
-    bottom: 57px;
-    transform: none
-  }
-
-  .luxe-feature-content .eyebrow {
-    margin-bottom: 14px
-  }
-
-  .luxe-feature-content h2 {
-    font-size: clamp(48px, 12vw, 67px)
-  }
-
-  .luxe-feature-content p {
-    font-size: 11px;
-    line-height: 1.7;
-    margin: 16px 0 20px
+    padding: 0 44px 24px 21px
   }
 
   .luxe-feature-side {
@@ -7855,7 +8168,7 @@ button {
 
   /* Mobile product detail */
   .product-page {
-    padding: 0 0 130px
+    padding: 0 0 194px
   }
 
   .product-breadcrumbs {
@@ -7874,30 +8187,59 @@ button {
 
   .product-gallery {
     width: 100%;
-    display: block
+    display: block;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
+  /* Phones: the 2:3 frame uses the full screen width. (A phone held sideways is capped to its height, so the frame still fits.) */
   .gallery-main {
-    aspect-ratio: 4/4.65;
-    width: 100%
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .gallery-actions {
+    top: 10px;
+    right: 10px;
+  }
+
+  @media (orientation: landscape) {
+    .gallery-main {
+      width: min(100%, calc(80vh * 2 / 3));
+      margin-inline: auto;
+    }
+  }
+
+  /* Wishlist on phones: a 40px circle with a 20px heart; the invisible ring keeps the touch target at 44px. */
+  .gallery-wishlist {
+    width: 40px;
+    height: 40px;
+  }
+
+  .gallery-wishlist::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+  }
+
+  .gallery-wishlist svg {
+    width: 20px;
+    height: 20px;
   }
 
   .gallery-main .smart-image img {
     object-fit: contain;
-    object-position: center top;
+    object-position: center center;
+    background: transparent;
   }
 
   .gallery-image-number {
     bottom: 10px;
     left: 11px;
     font-size: 8px
-  }
-
-  .gallery-wishlist {
-    top: 10px;
-    right: 10px;
-    width: 34px;
-    height: 34px
   }
 
   .gallery-thumbnails {
@@ -7908,8 +8250,9 @@ button {
   }
 
   .gallery-thumbnails button {
-    aspect-ratio: 4/4.4;
-    max-height: 111px
+    aspect-ratio: 2 / 3;
+    background: #f1efe9;
+    border: 1px solid #e8e8e8;
   }
 
   .gallery-thumbnails button>span {
@@ -8089,6 +8432,7 @@ button {
     font-size: 28px
   }
 
+  /* The purchase bar: fixed above the bottom navigation, visible as soon as the page opens, with both actions. */
   .mobile-sticky-buy {
     position: fixed;
     z-index: 45;
@@ -8100,43 +8444,134 @@ button {
     border-top: 1px solid var(--line);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 10px 16px;
-    min-height: 61px
+    gap: 8px;
+    padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    min-height: 60px
   }
 
-  .mobile-sticky-buy>div {
+  /* Price block: the selling price first and largest, the original price struck through beside it, and below them a subtle discount badge with the saving. */
+  .mobile-sticky-info {
     display: flex;
     flex-direction: column;
-    gap: 3px
+    gap: 3px;
+    min-width: 0;
+    flex: 0 0 auto;
+    margin-right: 2px
   }
 
-  .mobile-sticky-buy>div span {
-    font-size: 14px;
-    font-weight: 700
+  .sticky-price {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap
   }
 
-  .mobile-sticky-buy>div small {
+  .sticky-price strong {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1
+  }
+
+  .sticky-price del {
+    font-size: 10px;
+    color: #9d9c93
+  }
+
+  .mobile-sticky-info small {
     font-size: 8px;
-    color: #818279
+    color: #818279;
+    white-space: nowrap
   }
 
-  .mobile-sticky-buy>button {
-    border: 0;
-    background: var(--ink);
-    color: white;
-    min-height: 41px;
-    padding: 0 16px;
+  /* Scroll-aware price (the bar's data-price attribute is set by one IntersectionObserver on the in-page price row). While that row is on screen the bar is
+     compact: price plus the size hint. Once it scrolls away the original price, badge and saving fade in. Both versions occupy the same space, so nothing shifts. */
+  .sticky-line {
+    display: grid
+  }
+
+  .sticky-line>small {
+    grid-area: 1 / 1;
+    transition: opacity .2s ease, visibility 0s linear 0s
+  }
+
+  .sticky-hint {
+    opacity: 0;
+    visibility: hidden
+  }
+
+  .sticky-price del {
+    transition: opacity .2s ease, visibility 0s linear 0s
+  }
+
+  .mobile-sticky-buy[data-price="compact"] .sticky-price del,
+  .mobile-sticky-buy[data-price="compact"] .sticky-save {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s ease, visibility 0s linear .2s
+  }
+
+  .mobile-sticky-buy[data-price="compact"] .sticky-hint {
+    opacity: 1;
+    visibility: visible
+  }
+
+  .sticky-save {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 12px;
-    font-size: 8px;
+    gap: 4px
+  }
+
+  .sticky-off {
+    padding: 2px 4px;
+    background: #f0e4d5;
+    color: #90683f;
+    font-size: 7px;
     font-weight: 700;
-    letter-spacing: .1em;
-    flex: 1;
-    max-width: 230px
+    letter-spacing: .05em;
+    line-height: 1.2
+  }
+
+  .sticky-save em {
+    font-style: normal;
+    font-size: 8.5px;
+    font-weight: 600;
+    color: #2f7a4b
+  }
+
+  .mobile-sticky-buy .button {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 8px;
+    justify-content: center;
+    font-size: 10px;
+    letter-spacing: .09em;
+    white-space: nowrap
+  }
+
+  .mobile-sticky-buy .button:disabled {
+    opacity: .6;
+    cursor: not-allowed
+  }
+
+  /* The bar hides itself while the footer is in view (data-footer, set by an IntersectionObserver), so the footer only needs room for the bottom navigation. */
+  .product-page ~ .site-footer {
+    padding-bottom: 76px
+  }
+
+  .mobile-sticky-buy[data-footer="hide"] {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .15s ease, visibility 0s linear .15s
+  }
+
+  /* The in-page Add to bag / Buy now pair is replaced by the bar on phones. */
+  .product-detail-panel .inline-purchase {
+    display: none
   }
 
   .product-page .reviews-section {
@@ -8416,43 +8851,35 @@ button {
     font-size: 23px
   }
 
+  /* Product-card badges on phones: compact (15px tall, 7.5px text) and slightly tighter, so they cover less of the photograph (desktop and the container rule above are untouched). */
+  .product-card-tags {
+    gap: 3px
+  }
+
+  .product-badge,
+  .discount-badge {
+    min-height: 15px;
+    padding: 0 6px;
+    font-size: 7.5px
+  }
+
+  .discount-badge {
+    padding: 0 5px
+  }
+
   .login-page {
     grid-template-columns: 1fr;
     min-height: auto
   }
 
+  /* Phones: the campaign image is dropped so the sign-in form is on screen straight away (desktop and tablet keep the two-column layout). */
   .login-editorial {
-    min-height: 360px;
-    height: 45svh;
-    max-height: 480px
-  }
-
-  .login-editorial-copy {
-    left: 22px;
-    bottom: 24px
-  }
-
-  .login-editorial-copy .eyebrow {
-    font-size: 7px;
-    margin-bottom: 11px
-  }
-
-  .login-editorial-copy h1 {
-    font-size: 48px
-  }
-
-  .login-editorial-copy p {
-    font-size: 10px;
-    margin: 11px 0 18px
-  }
-
-  .editorial-bottom {
-    padding-top: 10px;
-    font-size: 7px
+    display: none
   }
 
   .login-panel-wrap {
-    padding: 27px 19px 27px
+    padding: 16px 16px 24px;
+    justify-content: flex-start
   }
 
   .login-panel {
@@ -8461,8 +8888,8 @@ button {
   }
 
   .login-brand {
-    gap: 12px;
-    margin-bottom: 25px
+    gap: 8px;
+    margin-bottom: 16px
   }
 
   .login-panel>h2 {
@@ -8471,7 +8898,7 @@ button {
 
   .login-panel>p {
     font-size: 10px;
-    margin-bottom: 22px
+    margin-bottom: 16px
   }
 
   .login-back-link {
@@ -9295,7 +9722,7 @@ button {
   }
 
   .product-page {
-    padding-bottom: 125px
+    padding-bottom: 189px
   }
 
   .product-detail-panel {
@@ -9762,32 +10189,30 @@ button {
   }
 }
 
-.product-card-media .smart-image img {
-  object-fit: contain;
-  background: #e8e6e0
-}
-
-@media(max-width:760px) {
-  .product-card-media .smart-image img {
-    object-fit: contain;
-    background: #e8e6e0
-  }
-}
-
 /* Client-review QA refinements: gallery, review submission, compact collections, and CMS polish. */
 @media (min-width: 761px) {
   .product-gallery {
     display: grid;
-    grid-template-columns: 78px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;
     gap: 10px;
     align-items: start;
   }
 
-  .gallery-main {
+  .product-gallery.has-thumbnails {
+    grid-template-columns: 78px minmax(0, 1fr);
+  }
+
+  .product-gallery.has-thumbnails .gallery-main {
     grid-column: 2;
     grid-row: 1;
-    width: 100%;
+    margin-inline: auto;
+  }
+
+  .product-gallery.single-image .gallery-main {
+    grid-column: 1;
+    grid-row: 1;
+    margin-inline: auto;
   }
 
   .gallery-thumbnails {
@@ -9804,8 +10229,17 @@ button {
   .gallery-thumbnails button {
     flex: 0 0 auto;
     width: 100%;
-    aspect-ratio: 4/5;
+    aspect-ratio: 2 / 3;
     max-height: none;
+    background: #f1efe9;
+    border: 1px solid #e8e8e8;
+    border-radius: 0;
+  }
+
+  .gallery-thumbnails button .smart-image img {
+    object-fit: contain;
+    object-position: center center;
+    background: transparent;
   }
 
   .gallery-thumbnails button>span {
@@ -10426,32 +10860,6 @@ button {
     opacity: 1;
     transform: translateY(-50%);
   }
-}
-
-/* Uniform product card crops; split-panel bleed is trimmed from the local assets. */
-.product-card-media {
-  aspect-ratio: 3/4;
-  background: #e8e6e0;
-}
-
-.product-card-media .smart-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.product-card-media .smart-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover !important;
-  object-position: center center !important;
-  background: #e8e6e0;
-}
-
-.product-card-media .product-image-link {
-  position: absolute;
-  inset: 0;
 }
 
 /* Luxe masthead keeps the brand name visibly spaced at every viewport. */
@@ -11285,23 +11693,37 @@ button {
   background: rgba(54, 149, 77, .16);
 }
 
-.social-links a[aria-label="Call us"] {
+.social-links a[aria-label="Call us"],
+.social-links a[aria-label="Phone"] {
   color: #e7d4bb;
 }
 
-.social-links a[aria-label="Call us"]:hover {
+.social-links a[aria-label="Call us"]:hover,
+.social-links a[aria-label="Phone"]:hover {
   background: rgba(202, 166, 111, .16);
+}
+
+.social-links a[aria-label="Instagram"] {
+  color: #f7a8c4;
+}
+
+.social-links a[aria-label="Instagram"]:hover {
+  color: #ffc2d6;
+  background: rgba(225, 48, 108, .16);
 }
 
 /* The Buy Now action uses the same size validation and cart state as Add to Bag. */
 .buy-now-button {
+  --buy-now-blue: #1f4e8c;
+  --buy-now-blue-hover: #173b6b;
+  --buy-now-blue-active: #12305a;
   width: 100%;
   min-height: 52px;
   justify-content: space-between;
   padding: 0 18px;
   margin-top: 9px;
-  border: 1px solid var(--burgundy);
-  background: var(--burgundy);
+  border: 1px solid var(--buy-now-blue);
+  background: var(--buy-now-blue);
   color: var(--white);
   border-radius: 2px;
   font-size: 10px;
@@ -11311,17 +11733,19 @@ button {
 }
 
 .buy-now-button:hover {
-  border-color: var(--burgundy-hover);
-  background: var(--burgundy-hover);
+  border-color: var(--buy-now-blue-hover);
+  background: var(--buy-now-blue-hover);
   color: var(--white);
 }
 
 .buy-now-button:active {
+  border-color: var(--buy-now-blue-active);
+  background: var(--buy-now-blue-active);
   transform: scale(0.995);
 }
 
 .buy-now-button:focus-visible {
-  outline: 2px solid var(--burgundy);
+  outline: 2px solid var(--buy-now-blue);
   outline-offset: 3px;
 }
 
@@ -11474,4 +11898,1664 @@ button {
   position: absolute !important;
   width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+
+/* ── admin image uploader ── */
+.image-uploader{display:grid;gap:10px}
+.image-uploader-label{font-size:12px;letter-spacing:.08em;font-weight:700}
+.image-dropzone{display:grid;justify-items:center;gap:6px;padding:18px;border:1.5px dashed #c9c2b6;border-radius:12px;text-align:center;background:#faf8f4}
+.image-dropzone.is-dragging{border-color:#a9793f;background:#f3ebdd}
+.image-dropzone p{margin:0;font-size:13px}.image-dropzone small{color:#777}
+.image-upload-progress{display:grid;grid-template-columns:1fr 120px 40px;gap:10px;align-items:center;font-size:12px}
+.image-upload-progress i{height:6px;border-radius:99px;background:#e7e1d6;overflow:hidden}.image-upload-progress b{display:block;height:100%;background:#a9793f}
+.image-uploader-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;list-style:none;margin:0;padding:0}
+.image-uploader-grid li{position:relative;border:1px solid #e3ddd1;border-radius:10px;overflow:hidden;background:#fff}
+.image-uploader-grid .smart-image{aspect-ratio:3/4;width:100%}
+.image-primary-badge{position:absolute;top:6px;left:6px;background:#111;color:#fff;font-size:9px;letter-spacing:.08em;padding:3px 6px;border-radius:99px}
+.image-uploader-actions{display:flex;justify-content:center;gap:4px;padding:6px;background:#faf8f4}
+.image-uploader-actions button{display:grid;place-items:center;width:26px;height:26px;border:1px solid #ddd5c7;border-radius:6px;background:#fff;cursor:pointer}
+.image-uploader-actions button:disabled{opacity:.35;cursor:default}
+.product-card-stock-note{margin:6px 0 0;font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1.35;text-transform:uppercase;color:#8a5a1f;overflow-wrap:anywhere}
+.stock-note{margin:10px 0 0;font-size:13px;font-weight:600;color:#8a5a1f}
+.admin-lowstock-card{grid-column:1/-1}
+.legal-page-editor{display:grid;gap:10px;margin-top:14px}
+.legal-page-editor textarea{min-height:160px}
+
+/* Size-stock grid reuses .admin-feature-flags (13px checkbox sizing); give its number inputs a readable size. */
+.admin-feature-flags.admin-size-stock label{font-size:12px !important;font-weight:700;gap:8px}
+.admin-feature-flags.admin-size-stock input{width:76px !important;height:40px !important;min-height:40px !important;padding:0 8px !important;font-size:14px !important;text-align:center}
+
+/* ── image uploader: always-visible Replace/Remove, overlaid so the grid never clips them ── */
+.image-uploader-grid li{display:block;aspect-ratio:3/4;min-height:150px}
+.image-uploader-grid li .smart-image{position:absolute;inset:0;width:100%;height:100%}
+.image-uploader-actions{position:absolute;left:0;right:0;bottom:0;display:flex;gap:4px;padding:6px;background:rgba(250,248,244,.94)}
+.image-uploader-actions button{flex:1;width:auto;height:28px;padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.04em}
+.image-uploader-actions button.is-danger{color:#a3262a;border-color:#e3b4b6}
+.image-uploader-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.image-uploader-grid li{aspect-ratio:auto;min-height:0;display:flex;flex-direction:column}
+.image-uploader-grid li .smart-image{position:relative;inset:auto;height:auto;aspect-ratio:3/4}
+.image-uploader-actions{position:static;flex-wrap:wrap;gap:6px;padding:8px;background:#faf8f4}
+.image-uploader-actions button{flex:1 1 60px;min-width:0;height:30px;padding:0 8px;font-size:12px;white-space:nowrap}
+.admin-form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:18px}
+.admin-danger-btn{height:42px;padding:0 18px;border:1px solid #e3b4b6;border-radius:8px;background:#fff;color:#a3262a;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer}
+.admin-danger-btn:hover{background:#fbeeee}
+.image-uploader-move{position:absolute;top:6px;right:6px;display:flex;gap:3px}
+.image-uploader-move button{display:grid;place-items:center;width:24px;height:24px;border:1px solid #ddd5c7;border-radius:6px;background:rgba(255,255,255,.95);cursor:pointer}
+.image-uploader-move button:disabled{opacity:.35;cursor:default}
+
+/* ── in-app confirmation dialog ── */
+.confirm-layer{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;background:rgba(17,17,17,.45)}
+.confirm-dialog{width:min(440px,100%);display:grid;gap:12px;padding:22px;border-radius:14px;background:#fff;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.confirm-dialog h2{margin:0;font-size:20px}
+.confirm-dialog p{margin:0;font-size:14px;line-height:1.5;color:#3d4550}
+.confirm-dialog label{display:grid;gap:6px;font-size:12px;font-weight:700;letter-spacing:.04em}
+.confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:4px}
+.confirm-danger{background:#a3262a !important;border-color:#a3262a !important}
+.confirm-dialog button:focus-visible,.confirm-dialog input:focus-visible{outline:2px solid #a9793f;outline-offset:2px}
+
+.order-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;padding:12px 4px;font-size:13px}
+.order-detail-grid h3{margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7a7468}
+.order-detail-grid p,.order-detail-grid ul,.order-detail-grid ol{margin:0 0 12px;padding-left:0;list-style:none;line-height:1.5}
+.admin-table td .admin-secondary-btn{margin:2px 4px 2px 0;white-space:nowrap}
+
+.order-actions{max-width:640px;margin:28px auto 0;text-align:left;font-size:14px}
+.order-actions h2{font-size:12px;letter-spacing:.12em;margin:0 0 10px}
+.order-timeline{list-style:none;margin:0 0 14px;padding:0;border-left:2px solid #ddd5c7}
+.order-timeline li{display:flex;justify-content:space-between;gap:12px;padding:4px 0 4px 12px}
+.order-timeline span{color:#7a7468;font-size:12px}
+.order-panel{border:1px solid #ddd5c7;border-radius:10px;padding:14px;margin:12px 0;display:grid;gap:10px}
+.order-panel label{display:grid;gap:4px;font-size:13px}
+.order-panel textarea,.order-panel input{border:1px solid #ddd5c7;border-radius:8px;padding:8px;font:inherit}
+.order-panel-actions{display:flex;flex-wrap:wrap;gap:10px}
+.order-note,.order-notice{color:#6b655a;font-size:13px}
+.order-return{border:1px solid #ddd5c7;border-radius:10px;padding:12px;margin:12px 0}
+.order-return p{margin:4px 0}
+
+.admin-tab-content,.admin-orders-full{min-width:0;max-width:100%}
+.order-detail-grid{white-space:normal;position:sticky;left:0;max-width:calc(100vw - 56px)}
+
+.admin-main{min-width:0;max-width:100%}
+.admin-main>*{min-width:0}
+
+.initial-splash-video{animation:none!important;background:#000;overflow:hidden}
+/* Whole frame always visible: contain (never cover), centred, on a black field; dvh follows the mobile browser's changing toolbars. */
+.initial-splash-video{height:100vh;height:100dvh}
+.splash-video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;object-position:center;display:block}
+
+/* ───── CMS typography system (scoped to .admin-app; the storefront is untouched) ─────
+   body 14px · inputs 14.5px · labels 13px · metadata 12–12.5px · nothing important below 12px */
+.admin-app{--admin-fs-body:14px;--admin-fs-nav:14px;--admin-fs-input:14.5px;--admin-fs-label:13px;--admin-fs-meta:12.5px;--admin-fs-micro:12px;--admin-muted:#5d584e;font-size:var(--admin-fs-body);line-height:1.5}
+.admin-app .admin-sidebar nav button,.admin-app .admin-sidebar nav button span{font-size:var(--admin-fs-nav)}
+.admin-app .admin-nav-label,.admin-app .admin-pill,.admin-app .eyebrow,.admin-app .admin-count-chip,.admin-app .status-pill,.admin-app .stock-indicator,.admin-app .nav-count{font-size:var(--admin-fs-micro)}
+.admin-app .admin-nav-label{letter-spacing:.1em;color:var(--admin-muted)}
+.admin-app .admin-sidebar-store strong,.admin-app .admin-user strong,.admin-app .admin-topbar-breadcrumb strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-sidebar-store span,.admin-app .admin-user span,.admin-app .admin-topbar-breadcrumb span,.admin-app .admin-app-footer span{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .store-avatar,.admin-app .admin-user-avatar,.admin-app .admin-topbar-avatar{font-size:var(--admin-fs-micro)}
+.admin-app .admin-logout,.admin-app .admin-view-store,.admin-app .admin-topbar-right span,.admin-app .admin-topbar-right strong{font-size:var(--admin-fs-label)}
+.admin-app .brand-mark span{font-size:inherit}
+.admin-app .admin-table th{font-size:var(--admin-fs-micro);letter-spacing:.06em;color:var(--admin-muted)}
+.admin-app .admin-table td,.admin-app .admin-table td strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-table td small,.admin-app .admin-table td em{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-edit-form label,.admin-app .admin-feature-flags label,.admin-app label.admin-check,.admin-app .admin-feature-flags legend,.admin-app .admin-edit-form legend{font-size:var(--admin-fs-label)}
+.admin-app input:not([type=checkbox]):not([type=radio]),.admin-app select,.admin-app textarea,.admin-app option{font-size:var(--admin-fs-input)}
+.admin-app .admin-feature-flags input:not([type=checkbox]):not([type=radio]){font-size:var(--admin-fs-body)}
+.admin-app small,.admin-app .admin-field-note,.admin-app .image-dropzone small{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-page-heading p,.admin-app .admin-card-heading p{font-size:var(--admin-fs-body)}
+.admin-app .admin-primary-btn,.admin-app .admin-secondary-btn,.admin-app .admin-quiet-btn,.admin-app .admin-text-button,.admin-app .admin-danger-quiet,.admin-app .metric-text-action{font-size:var(--admin-fs-label)}
+.admin-app .admin-metric-card span,.admin-app .admin-metric-card em,.admin-app .admin-metric-card small,.admin-app .admin-metric-card i,.admin-app strong.metric-warning{font-size:var(--admin-fs-meta)}
+.admin-app .admin-quick-action strong,.admin-app .admin-product-list-row strong{font-size:var(--admin-fs-body)}
+.admin-app .admin-quick-action small,.admin-app .admin-product-list-row small,.admin-app .admin-product-list-row em{font-size:var(--admin-fs-meta)}
+.admin-app .admin-list-toolbar span,.admin-app .revenue-total span{font-size:var(--admin-fs-label)}
+.admin-app .chart-x-labels span,.admin-app .chart-y-labels span,.admin-app .image-primary-badge{font-size:11px}
+.admin-app :focus-visible{outline:2px solid #1d4ed8;outline-offset:2px}
+.admin-app .form-error-banner,.admin-app [role=alert]{font-size:var(--admin-fs-body)}
+
+/* ───── Orders: labelled Name / Mobile ───── */
+.order-customer .order-field{display:flex;gap:8px;align-items:baseline;white-space:nowrap}
+.order-customer .order-field em{font-style:normal;font-size:var(--admin-fs-micro,12px);letter-spacing:.06em;text-transform:uppercase;color:var(--admin-muted,#5d584e);min-width:48px}
+.order-customer .order-field b{font-weight:600}
+.order-col-mobile{display:none}
+.order-customer .order-field-mobile{display:flex}
+@media (min-width:1100px){
+  .order-col-mobile{display:table-cell}
+  .order-customer .order-field-mobile{display:none}
+  .order-customer .order-field em{display:none}
+}
+
+
+
+/* ───── CMS typography: remaining pages (settings, banners, leads, category rows, toggles, callouts) ───── */
+.admin-app .admin-settings-layout label,.admin-app .hero-editor-fields label,.admin-app .admin-feature-flags label{font-size:var(--admin-fs-label)}
+.admin-app .admin-settings-layout small,.admin-app .hero-editor-fields small,.admin-app .hero-clickthrough-note,.admin-app .admin-check small{font-size:var(--admin-fs-meta);color:var(--admin-muted)}
+.admin-app .admin-category-row strong,.admin-app .lead-detail-grid strong,.admin-app .collection-status-grid strong,.admin-app .admin-callout strong{font-size:var(--admin-fs-body)}
+.admin-app .lead-detail-grid span,.admin-app .collection-status-grid span,.admin-app .admin-callout p,.admin-app .admin-table-empty,.admin-app .admin-dashboard-grid p{font-size:var(--admin-fs-meta)}
+.admin-app .admin-toggle em{font-size:var(--admin-fs-micro);font-style:normal}
+.admin-app .admin-category-row small{font-size:var(--admin-fs-meta)}
+
+.admin-app .admin-edit-form .admin-feature-flags label,.admin-app .admin-edit-form .admin-feature-flags label span,.admin-app label.admin-full-label,.admin-app .admin-editor-empty p,.admin-app .admin-content-section-head span,.admin-app .admin-content-section-head p,.admin-app .admin-lead-list-row strong,.admin-app .admin-lead-avatar{font-size:var(--admin-fs-label)}
+.admin-app .admin-edit-form small,.admin-app .admin-card .admin-edit-form small{font-size:var(--admin-fs-meta)}
+
+/* ───── LUXE Rail: Snitch-inspired horizontal category rail (desktop) & 3-column category grid (mobile) ───── */
+.luxe-rail-section {
+  padding-top: 28px;
+  padding-bottom: 24px;
+  background: #ffffff;
+  box-shadow: 0 0 0 100vmax #ffffff;
+  clip-path: inset(0 -100vmax);
+  position: relative;
+}
+
+.luxe-rail-section + .category-section {
+  padding-top: 48px;
+}
+
+.luxe-rail {
+  position: relative;
+  width: 100%;
+}
+
+/* Desktop horizontal rail */
+.luxe-rail-track {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: clamp(24px, 3.2vw, 44px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 8px;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 6px 8px 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.luxe-rail-track::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.luxe-rail-track:focus-visible {
+  outline: 2px solid var(--ink, #111);
+  outline-offset: 4px;
+}
+
+.luxe-rail-item {
+  flex: 0 0 clamp(165px, 16vw, 210px);
+  min-width: 0;
+  scroll-snap-align: start;
+  text-align: center;
+}
+
+/* LUXE Tile */
+.luxe-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  color: inherit;
+  text-decoration: none;
+  width: 100%;
+}
+
+.luxe-tile:focus-visible {
+  outline: 2px solid var(--ink, #111);
+  outline-offset: 4px;
+}
+
+/* Category Label directly above image - Snitch clean uppercase typography */
+.luxe-tile-name {
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: clamp(12px, 0.95vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
+  color: var(--ink, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Clean, isolated product image frame */
+.luxe-tile .smart-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 210px;
+  margin: 0 auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.luxe-tile .smart-image img {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.luxe-tile:hover .smart-image img {
+  transform: scale(1.04);
+}
+
+/* Arrow Buttons */
+.luxe-rail-btn {
+  position: absolute;
+  top: 55%;
+  transform: translateY(-50%);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  color: #111;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  transition: opacity 0.2s, background 0.2s, transform 0.2s;
+}
+
+.luxe-rail-btn:hover:not(:disabled) {
+  background: #f7f7f7;
+  transform: translateY(-50%) scale(1.05);
+}
+
+.luxe-rail-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.luxe-rail-prev { left: 0; }
+.luxe-rail-next { right: 0; }
+
+/* ───── Mobile: 3-column Snitch category grid ───── */
+@media (max-width: 768px) {
+  .luxe-rail-section {
+    padding-top: 14px;
+    padding-bottom: 20px;
+  }
+
+  .luxe-rail-section + .category-section {
+    padding-top: 32px;
+  }
+
+  .luxe-rail-btn {
+    display: none !important;
+  }
+
+  .luxe-rail-track {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    overflow-x: visible;
+    overflow-y: visible;
+    padding: 0;
+    cursor: default;
+    border-top: 1px solid #f0f0f0;
+    border-left: 1px solid #f0f0f0;
+    scroll-snap-type: none;
+  }
+
+  .luxe-rail-item {
+    flex: unset;
+    min-width: 0;
+    border-right: 1px solid #f0f0f0;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 6px 14px;
+    background: #ffffff;
+    scroll-snap-align: unset;
+  }
+
+  .luxe-tile-name {
+    font-size: clamp(10px, 2.7vw, 12px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin: 0 0 6px;
+    line-height: 1.2;
+  }
+
+  .luxe-tile .smart-image {
+    max-width: 100%;
+    max-height: clamp(80px, 22vw, 110px);
+    aspect-ratio: 1 / 1;
+  }
+
+  .luxe-tile .smart-image img {
+    object-fit: contain;
+  }
+}
+
+/* MSG91 widget CAPTCHA mount (hCaptcha checkbox) */
+.msg91-captcha{display:flex;justify-content:center;margin:14px 0 4px;max-width:100%;overflow:hidden}
+.msg91-captcha:empty{display:none}
+
+
+/* Payment method notes and conflict banners */
+.payment-method-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding: 10px 14px;
+  background: #fbfbf9;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #63645e;
+}
+
+.payment-conflict-banner {
+  margin: 14px 0;
+  padding: 18px 20px;
+  border: 1px solid #e8c7c2;
+  border-radius: var(--radius);
+  background: #fdf6f5;
+  color: #2b2b28;
+}
+
+.conflict-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b33927;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.conflict-explanation {
+  font-size: 12px;
+  color: #55534e;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.conflict-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #ebd8d5;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.conflict-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7d443b;
+}
+
+.conflict-group ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #3b3a36;
+}
+
+.conflict-action-text {
+  font-size: 11px;
+  color: #7a756d;
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+
+.separate-bag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 10px 18px;
+  text-decoration: none;
+}
+
+.payment-configuring-banner {
+  margin: 14px 0;
+  padding: 18px 20px;
+  border: 1px solid #e4dfd3;
+  background: #faf8f5;
+  color: #2b2b28;
+}
+
+.configuring-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #765c41;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.payment-configuring-banner p {
+  font-size: 12px;
+  color: #55534e;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.payment-configuring-banner a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.admin-merch-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.admin-merch-filters button { padding: 6px 12px; border: 1px solid var(--line, #d8d4cc); border-radius: 999px; background: transparent; font-size: 12px; cursor: pointer; }
+.admin-merch-filters button.active { background: var(--ink, #1a1a1a); border-color: var(--ink, #1a1a1a); color: #fff; }
+
+/* Merchandising filter chips: compact, single row, 44px-friendly tap area via padding, readable focus ring */
+.admin-product-list-card .admin-merch-filters { gap: 6px; flex-wrap: wrap; }
+.admin-product-list-card .admin-merch-filters button { font-size: 12px; line-height: 1.2; min-height: 32px; padding: 6px 12px; white-space: nowrap; letter-spacing: 0; text-transform: none; }
+.admin-product-list-card .admin-merch-filters button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.admin-product-list-card .admin-merch-filters { margin: 0; padding: 12px 16px; border-bottom: 1px solid #edf0f3; }
+
+.admin-combo { position: relative; display: block; }
+.admin-combo-list { position: absolute; z-index: 40; top: 100%; left: 0; right: 0; display: block; max-height: 240px; overflow-y: auto; margin-top: 2px; background: #fff; border: 1px solid #d8d4cc; border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.admin-combo-option { display: block; padding: 9px 12px; font-size: 14px; line-height: 1.3; cursor: pointer; }
+.admin-combo-option:hover, .admin-combo-option.active { background: #f3f0ea; }
+.admin-combo-option[aria-selected="true"] { font-weight: 600; }
+
+.admin-stock-message { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid #e3e7eb; padding: 12px; margin: 2px 0 18px; }
+.admin-stock-message legend { font-size: 8px; font-weight: 700; letter-spacing: .11em; color: #87909c; padding: 0 5px; }
+.admin-stock-modes { display: flex; flex-wrap: wrap; gap: 14px; }
+.admin-stock-modes label { display: flex; flex-direction: row; align-items: center; gap: 7px; margin: 0; }
+.admin-stock-modes input[type=checkbox] { width: 13px; height: 13px; min-height: 13px; padding: 0; accent-color: #27303b; }
+.admin-stock-message-field { display: flex; flex-direction: column; gap: 8px; margin: 0; width: 100%; }
+.admin-stock-message small { display: block; margin: 0; font-size: 12px; line-height: 1.45; color: #6b7280; }
+.admin-review-note { margin: 0; padding: 8px 10px; border: 1px solid #e0b252; border-radius: 6px; background: #fff7e6; color: #7a5a12; font-size: 12px; line-height: 1.45; }
+.admin-real-stock { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.admin-real-stock > span { font-size: 12px; color: #6b7280; }
+.admin-real-stock ul { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0; padding: 0; list-style: none; }
+.admin-real-stock li { padding: 3px 10px; border-radius: 999px; background: #f3f0ea; }
+.admin-low-badge { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b45309; font-style: normal; }
+/* Number + message share two grid rows (label row, input row), so inputs start at the same height even when a label wraps. */
+.admin-stock-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: auto auto; column-gap: 12px; row-gap: 8px; align-items: stretch; }
+.admin-stock-fields > label { display: grid; grid-template-rows: subgrid; grid-row: span 2; gap: 0; margin: 0; align-content: end; }
+.admin-stock-fields > label > input { align-self: start; }
+@supports not (grid-template-rows: subgrid) {
+  .admin-stock-fields > label { display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
+}
+@media (max-width: 560px) {
+  .admin-stock-fields { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; }
+  .admin-stock-fields > label + label { margin-top: 12px; }
+}
+.stock-note-custom { font-style: italic; opacity: .85; }
+.stock-note-tag { display: inline-block; margin-right: 8px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 3px; font-size: 10px; font-style: normal; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+
+/* ───── Admin dashboard: main column + sidebar (Quick actions, then Quick observation) ───── */
+.admin-dashboard-main, .admin-dashboard-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; align-self: start; }
+.admin-dashboard-main > .admin-card, .admin-dashboard-side > .admin-card { grid-column: auto; grid-row: auto !important; align-self: stretch; }
+.admin-dashboard-side .admin-quick-actions { padding-bottom: 6px; }
+@media (max-width: 1020px) { .admin-dashboard-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ───── Admin status / filter selects: same size and weight as the other admin controls ───── */
+/* Root cause of the tiny Update dropdown: `.admin-table-spacious td select` forced 8px (7px on mobile) and out-ranked the admin type scale. */
+.admin-app select.admin-status-select,
+.admin-app select.admin-filter-select { height: 40px; min-height: 40px; padding: 0 12px; font-size: var(--admin-fs-input); color: var(--admin-ink, #21252e); border: 1px solid #d8d4cc; border-radius: 6px; background-color: #fff; }
+.admin-app select.admin-status-select { min-width: 150px; max-width: 100%; }
+.admin-app select.admin-filter-select { min-width: 160px; }
+.admin-app .admin-list-toolbar .admin-filter-select { margin-left: auto; }
+
+/* ───── Admin pagination ───── */
+.admin-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 20px; border-top: 1px solid #e4e7eb; }
+.admin-pagination[aria-busy="true"] { opacity: .65; }
+.admin-pagination-summary { margin: 0; font-size: var(--admin-fs-label); color: var(--admin-muted, #5d584e); }
+.admin-pagination-summary strong { color: var(--admin-ink, #21252e); }
+.admin-pagination-size { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: var(--admin-fs-label); color: var(--admin-muted, #5d584e); flex-direction: row; }
+.admin-app .admin-pagination-size select { height: 36px; min-height: 36px; padding: 0 8px; font-size: var(--admin-fs-label); border: 1px solid #d8d4cc; border-radius: 6px; background: #fff; }
+.admin-pagination-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+.admin-pagination-pages button { min-width: 36px; height: 36px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d8d4cc; border-radius: 6px; background: #fff; color: var(--admin-ink, #21252e); font-size: var(--admin-fs-label); font-weight: 600; cursor: pointer; }
+.admin-pagination-pages button:hover:not(:disabled):not(.active) { background: #f6f3ec; }
+.admin-pagination-pages button.active { background: var(--admin-ink, #21252e); border-color: var(--admin-ink, #21252e); color: #fff; }
+.admin-pagination-pages button:disabled { opacity: .4; cursor: default; }
+.admin-pagination-gap { min-width: 24px; text-align: center; color: var(--admin-muted, #5d584e); }
+@media (max-width: 700px) { .admin-pagination { padding: 12px 14px; } .admin-pagination-pages { margin-left: 0; width: 100%; } .admin-app .admin-list-toolbar .admin-filter-select { margin-left: 0; width: 100%; } }
+
+/* Enquiry "Status" heading: same style as CONTACT / PROJECT TYPE / RECEIVED (the label was left at 8px). */
+.admin-app .lead-actions label { font-size: var(--admin-fs-meta); letter-spacing: .13em; text-transform: uppercase; font-weight: 700; color: #9aa1ab; gap: 8px; }
+.admin-app .lead-actions label select { letter-spacing: normal; text-transform: none; font-weight: 400; }
+
+/* ───── Admin Product Editor: headings, option labels and fieldsets (one scoped block) ───── */
+.admin-app .admin-edit-form { --admin-heading: #21252e; --admin-option: #3f4047; }
+
+/* Headings: field labels, fieldset legends, the image-uploader title and the stock-field labels share one style. */
+.admin-app .admin-edit-form > label,
+.admin-app .admin-edit-form .admin-form-two > label,
+.admin-app .admin-edit-form .admin-form-three > label,
+.admin-app .admin-edit-form .admin-stock-message-field,
+.admin-app .admin-edit-form legend,
+.admin-app .admin-edit-form .image-uploader-label {
+  color: var(--admin-heading);
+  font-size: var(--admin-fs-label);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.admin-app .admin-edit-form legend { padding: 0 6px; }
+
+/* Fieldsets (Merchandising, Real stock, Returns, Payment, Stock message). */
+.admin-app .admin-edit-form .admin-feature-flags,
+.admin-app .admin-edit-form .admin-stock-message { padding: 14px 16px 16px; margin: 2px 0 20px; }
+.admin-app .admin-edit-form .admin-feature-flags { gap: 10px 22px; }
+.admin-app .admin-edit-form .admin-stock-modes { gap: 10px 22px; }
+
+/* Option labels (checkbox text) stay secondary to their heading. */
+.admin-app .admin-edit-form .admin-feature-flags label,
+.admin-app .admin-edit-form .admin-stock-modes label { font-weight: 500; line-height: 1.4; gap: 9px; }
+.admin-app .admin-edit-form .admin-stock-modes label { font-size: 13.5px; color: var(--admin-option); }
+.admin-app .admin-edit-form .admin-feature-flags input[type=checkbox],
+.admin-app .admin-edit-form .admin-stock-modes input[type=checkbox] { flex: 0 0 16px; }
+.admin-app .admin-edit-form .admin-stock-modes input[type=checkbox] { width: 16px; height: 16px; min-height: 16px; }
+
+/* The shared .admin-feature-flags rules (also used by the legal-pages editor) force font-size, colour and the 13px
+   checkbox with !important, so the scoped overrides below need it too. Nothing outside .admin-edit-form is touched. */
+.admin-app .admin-edit-form .admin-feature-flags label { font-size: 13.5px !important; color: var(--admin-option) !important; }
+.admin-app .admin-edit-form .admin-feature-flags input[type=checkbox] { width: 16px !important; height: 16px !important; min-height: 16px !important; }
+/* Size-stock fieldset: its S / M / L / XL / XXL labels are field headings, not options. */
+.admin-app .admin-edit-form .admin-feature-flags.admin-size-stock label { font-size: var(--admin-fs-label) !important; font-weight: 600; letter-spacing: .02em; color: var(--admin-heading) !important; }
+
+/* ───────────── Hero banners: storefront media ───────────── */
+.hero-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden
+}
+
+.hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 34%;
+  opacity: 0;
+  transition: opacity .5s ease;
+  background: transparent
+}
+
+.hero-video.is-ready {
+  opacity: 1
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-video {
+    display: none
+  }
+}
+
+/* ───────────── Hero banners: admin manager ───────────── */
+.hb-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap
+}
+
+.hb-add {
+  min-height: 40px;
+  padding: 0 18px;
+  font-size: 11px
+}
+
+.hb-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 4px 0 16px
+}
+
+.hb-stats>div {
+  background: #fff;
+  border: 1px solid #e1e5ea;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px
+}
+
+.hb-stats strong {
+  font: 500 26px var(--font-display)
+}
+
+.hb-stats span {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #697381
+}
+
+.hb-empty {
+  padding: 34px;
+  text-align: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center
+}
+
+.hb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px
+}
+
+.hb-card {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 360px) minmax(0, 1fr);
+  gap: 18px;
+  padding: 14px;
+  align-items: start
+}
+
+.hb-card.is-hidden .hb-card-media {
+  opacity: .72
+}
+
+.hb-card-order {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px
+}
+
+.slide-number-lite {
+  font: 500 24px var(--font-display);
+  color: #16181b
+}
+
+.hb-move {
+  display: flex;
+  flex-direction: column;
+  gap: 5px
+}
+
+.hb-move button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d9dde3;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer
+}
+
+.hb-move button:disabled {
+  opacity: .35;
+  cursor: not-allowed
+}
+
+.hb-card-media {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end
+}
+
+.hb-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0
+}
+
+.hb-thumb-frame {
+  position: relative;
+  background: #dad8d1;
+  overflow: hidden;
+  border: 1px solid #e1e5ea
+}
+
+.hb-thumb-desktop .hb-thumb-frame {
+  aspect-ratio: 16 / 7
+}
+
+.hb-thumb-mobile .hb-thumb-frame {
+  aspect-ratio: 9 / 16;
+  max-height: 150px;
+  margin: 0 auto
+}
+
+.hb-thumb-frame .smart-image,
+.hb-thumb-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover
+}
+
+.hb-thumb-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #697381;
+  text-align: center;
+  padding: 8px
+}
+
+.hb-thumb-badge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  background: #16181b;
+  color: #fff;
+  font-size: 9px;
+  letter-spacing: .08em;
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2
+}
+
+.hb-thumb-caption {
+  font-size: 10px;
+  color: #697381;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap
+}
+
+.hb-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px
+}
+
+.hb-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap
+}
+
+.hb-card-title h3 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere
+}
+
+.hb-card-body p {
+  margin: 0;
+  font-size: 12px;
+  color: #3d4652
+}
+
+.hb-card-body small {
+  font-size: 11px;
+  color: #697381;
+  overflow-wrap: anywhere
+}
+
+.hb-status {
+  font-size: 9px;
+  letter-spacing: .1em;
+  padding: 3px 7px;
+  background: #eceff3;
+  color: #697381
+}
+
+.hb-status.is-live {
+  background: #e3f1e6;
+  color: #2a6b3a
+}
+
+.hb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px
+}
+
+.hb-actions .admin-secondary-btn {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px
+}
+
+.hb-delete {
+  color: #a23b32
+}
+
+.hb-editor {
+  padding: 18px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 4px
+}
+
+.hb-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e9ecf0
+}
+
+.hb-editor-head h3 {
+  margin: 4px 0 0;
+  font-size: 18px
+}
+
+.hb-section {
+  padding: 16px 0;
+  border-bottom: 1px solid #eef0f3;
+  display: grid;
+  gap: 12px
+}
+
+.hb-section h4 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 9px
+}
+
+.hb-section h4 b {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #16181b;
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px
+}
+
+.hb-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #3d4652
+}
+
+.hb-section label small {
+  font-weight: 400;
+  color: #697381;
+  font-size: 11px
+}
+
+.hb-section input:not([type='checkbox']),
+.hb-section textarea {
+  border: 1px solid #d9dde3;
+  background: #fcfcfd;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  width: 100%;
+  min-width: 0
+}
+
+.hb-check {
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 10px !important;
+  font-weight: 400 !important;
+  background: #f6f4ef;
+  border: 1px solid #e9dfd0;
+  padding: 10px 12px
+}
+
+.hb-check input {
+  margin-top: 3px
+}
+
+.hb-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #697381;
+  line-height: 1.5
+}
+
+.hb-note {
+  background: #fbf3e2;
+  border: 1px solid #ecd9a8;
+  color: #7a5b12;
+  padding: 8px 10px;
+  font-size: 11px
+}
+
+.hb-note p {
+  margin: 0
+}
+
+.hb-slot {
+  border: 1px solid #e1e5ea;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  min-width: 0
+}
+
+.hb-slot legend {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px
+}
+
+.hb-slot.is-off {
+  opacity: .45
+}
+
+.hb-segment,
+.hb-preview-tabs {
+  display: inline-flex;
+  border: 1px solid #d9dde3;
+  width: fit-content
+}
+
+.hb-segment button,
+.hb-preview-tabs button {
+  border: 0;
+  background: #fff;
+  padding: 8px 14px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 36px
+}
+
+.hb-segment button+button,
+.hb-preview-tabs button+button {
+  border-left: 1px solid #d9dde3
+}
+
+.hb-segment button.is-active,
+.hb-preview-tabs button.is-active {
+  background: #16181b;
+  color: #fff
+}
+
+.hb-video-preview {
+  display: grid;
+  gap: 6px
+}
+
+.hb-video-preview video {
+  width: 100%;
+  max-height: 220px;
+  background: #16181b;
+  object-fit: contain
+}
+
+.hb-video-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #697381
+}
+
+.hb-video-meta .is-danger {
+  margin-left: auto;
+  border: 1px solid #e6c7c3;
+  background: #fff;
+  color: #a23b32;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer
+}
+
+.hb-preview {
+  display: grid;
+  gap: 10px
+}
+
+.hb-preview-stage {
+  position: relative;
+  overflow: hidden;
+  background: #3c3e3a;
+  color: #fff;
+  margin: 0 auto;
+  width: 100%
+}
+
+.hb-preview-desktop {
+  aspect-ratio: 16 / 6.5
+}
+
+.hb-preview-mobile {
+  aspect-ratio: 9 / 16;
+  max-width: 240px
+}
+
+.hb-preview-stage img,
+.hb-preview-stage video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover
+}
+
+.hb-preview-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(13, 15, 13, .6), rgba(13, 15, 13, .1) 70%)
+}
+
+.hb-preview-copy {
+  position: absolute;
+  left: 5%;
+  bottom: 12%;
+  display: grid;
+  gap: 4px;
+  max-width: 60%;
+  z-index: 2;
+  white-space: pre-line
+}
+
+.hb-preview-copy strong {
+  font: 500 clamp(14px, 2.4vw, 26px) var(--font-display)
+}
+
+.hb-preview-copy span {
+  font-size: 11px
+}
+
+.hb-editor-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-top: 12px
+}
+
+.hb-editor-actions .admin-primary-btn,
+.hb-editor-actions .admin-secondary-btn {
+  min-height: 40px
+}
+
+@media (max-width: 900px) {
+  .hb-card {
+    grid-template-columns: 48px minmax(0, 1fr)
+  }
+
+  .hb-card-body {
+    grid-column: 1 / -1
+  }
+
+  .hb-stats {
+    grid-template-columns: 1fr
+  }
+}
+
+/* ───────────── Hero carousel: pause / play (a small round icon inside the navigation bar; automatic movement must stay stoppable) ───────────── */
+.hero-nav-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateX(-50%);
+}
+
+.hero-pause {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(231, 212, 187, .45);
+  border-radius: 50%;
+  background: rgba(22, 23, 21, .35);
+  color: #f6efe4;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.hero-pause:hover {
+  background: rgba(22, 23, 21, .72);
+  border-color: #e7d4bb;
+}
+
+.hero-pause:focus-visible {
+  outline: 2px solid #e7d4bb;
+  outline-offset: 3px;
+}
+
+/* ───────────── Hero carousel: manual navigation (arrows, indicators, swipe) ───────────── */
+/* Vertical page scrolling stays with the browser; only sideways finger movement reaches the swipe handler. */
+.hero-section {
+  touch-action: pan-y;
+}
+
+.hero-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-top: -19px;
+  padding: 0;
+  border: 1px solid rgba(231, 212, 187, .55);
+  border-radius: 50%;
+  background: rgba(22, 23, 21, .42);
+  color: #f6efe4;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .25s ease, background .2s ease, border-color .2s ease;
+}
+
+.hero-arrow-prev {
+  left: clamp(10px, 1.6vw, 28px);
+}
+
+.hero-arrow-next {
+  right: clamp(10px, 1.6vw, 28px);
+}
+
+.hero-arrow:hover {
+  background: rgba(22, 23, 21, .72);
+  border-color: #e7d4bb;
+}
+
+.hero-arrow:focus-visible,
+.hero-dot:focus-visible {
+  outline: 2px solid #e7d4bb;
+  outline-offset: 3px;
+  opacity: 1;
+}
+
+/* With a mouse the arrows stay out of the way until the banner is hovered or a control has focus; touch screens always show them. */
+@media (hover: hover) and (pointer: fine) {
+  .hero-arrow {
+    opacity: 0;
+  }
+
+  .hero-section:hover .hero-arrow,
+  .hero-section:focus-within .hero-arrow {
+    opacity: 1;
+  }
+}
+
+.hero-indicators {
+  display: flex;
+  align-items: center;
+}
+
+.hero-dot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hero-dot span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: rgba(246, 239, 228, .45);
+  transition: background .25s ease, height .25s ease;
+}
+
+.hero-dot:hover span {
+  background: rgba(246, 239, 228, .8);
+}
+
+.hero-dot.is-active span {
+  height: 3px;
+  background: #e7d4bb;
+}
+
+.hero-counter {
+  margin-left: 10px;
+  font: 600 10px/1 var(--font-manrope, inherit);
+  letter-spacing: .14em;
+  color: rgba(246, 239, 228, .88);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+
+  /* On a phone the headline and copy sit at the BOTTOM of the banner, so the controls stay clear of them:
+     the arrows at the edges above the text, the pause icon and indicators on the bottom edge under the copy. */
+  .hero-arrow {
+    top: 40%;
+    width: 34px;
+    height: 34px;
+    margin-top: -17px;
+  }
+
+  .hero-arrow-prev {
+    left: 10px;
+  }
+
+  .hero-arrow-next {
+    right: 10px;
+  }
+
+  .hero-nav-bar {
+    bottom: 3px;
+  }
+
+  .hero-dot {
+    width: 26px;
+  }
+
+  .hero-dot span {
+    width: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .hero-arrow,
+  .hero-dot span,
+  .hero-pause {
+    transition: none;
+  }
+}
+
+/* ───────────── Product gallery: previous / next arrows (the thumbnails, counter and layout are unchanged) ───────────── */
+/* Vertical page scrolling stays with the browser; only sideways finger movement reaches the swipe handler. */
+.gallery-main {
+  touch-action: pan-y;
+}
+
+.gallery-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+  padding: 0;
+  border: 1px solid rgba(22, 23, 21, .14);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .84);
+  color: var(--ink, #161715);
+  box-shadow: 0 2px 10px rgba(22, 23, 21, .12);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.gallery-arrow-prev {
+  left: 10px;
+}
+
+.gallery-arrow-next {
+  right: 10px;
+}
+
+.gallery-arrow:hover {
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(22, 23, 21, .18);
+}
+
+.gallery-arrow:focus-visible {
+  outline: 2px solid var(--ink, #161715);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/* With a mouse the arrows are quiet until the image is hovered or a control inside has focus; touch screens show them fully and a bit larger. */
+@media (hover: hover) and (pointer: fine) {
+  .gallery-arrow {
+    opacity: .55;
+  }
+
+  .gallery-main:hover .gallery-arrow,
+  .product-gallery:focus-within .gallery-arrow {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .gallery-arrow {
+    width: 40px;
+    height: 40px;
+    margin-top: -20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-arrow {
+    transition: none;
+  }
+}
+
+/* Phones swipe the picture (and the thumbnails select it): no previous / next arrows. Desktop and tablets keep them. This comes after the arrow rules above so it wins. */
+@media (max-width: 760px) {
+  .gallery-arrow {
+    display: none;
+  }
+}
+
+/* Products catalogue: the empty / zero-results message sits in the middle of the results area only (below the search and filters). */
+.admin-product-list.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.admin-product-list-empty { margin: 0; max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .admin-product-list.is-empty { min-height: 200px; }
+}
+
+/* Admin preview of the homepage Luxe band: the same markup and styles as the storefront, at a smaller size inside the editor card. */
+.lf-preview { border: 1px solid #e3e0d9; overflow: hidden; border-radius: 2px; container-type: inline-size; }
+/* Same height rule as the storefront band, computed from the preview's own width, so the picture is framed the way the page will frame it. */
+.lf-preview .luxe-feature { min-height: clamp(300px, 54cqw, 700px); }
+.lf-preview .luxe-feature-content { padding: 0 28px 24px; }
+.lf-preview .luxe-feature-side { right: 14px; bottom: 14px; }
+.lf-preview .button { pointer-events: none; }
+.lf-preview.is-hidden { opacity: .45; filter: grayscale(.6); }
+.lf-editor .hb-editor-head { align-items: flex-start; gap: 16px; }
+
+/* Image uploader optimization feedback */
+.image-uploader-info {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  color: #312e81;
+  background: #eef2ff;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.image-uploader-info p {
+  margin: 0;
+}
+
+/* Admin top bar on phones: row 1 = menu button + page title, row 2 = storefront status + View store. Tablet and desktop keep their layout. */
+@media (max-width: 760px) {
+  .admin-app .admin-topbar { flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 14px 10px; min-height: 0; }
+  .admin-app .admin-mobile-menu { flex: 0 0 44px; width: 44px; height: 44px; }
+  .admin-app .admin-topbar-breadcrumb { flex: 1 1 0; min-width: 0; }
+  .admin-app .admin-topbar-breadcrumb > strong { font-size: 17px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+  .admin-app .admin-topbar-right { order: 3; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; padding-top: 8px; border-top: 1px solid #eef0f3; font-size: 13px; white-space: normal; }
+  .admin-app .admin-topbar-right > span:nth-of-type(1) { width: 8px; height: 8px; flex: 0 0 8px; }
+  .admin-app .admin-topbar-right > span:nth-of-type(2) { margin-right: auto; font-size: 13px; line-height: 1.3; white-space: nowrap; }
+  .admin-app .admin-view-store { margin: 0; min-height: 40px; padding: 0 14px; font-size: 13px; gap: 6px; white-space: nowrap; }
+  .admin-app .admin-view-store svg { width: 15px; height: 15px; }
+}
+
+/* Banner video optimisation modes and the processing summary (Admin → Homepage & banners). */
+.hb-video-modes { border: 1px solid #e3e0d9; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
+.hb-video-modes legend { padding: 0 6px; font-size: 12px; font-weight: 600; }
+.hb-video-modes label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 8px 10px; border: 1px solid transparent; }
+.hb-video-modes label.is-active { border-color: #1f4e8c; background: #f4f7fb; }
+.hb-video-modes label span { display: grid; gap: 2px; }
+.hb-video-modes label small { color: #686962; font-size: 12px; line-height: 1.4; }
+.hb-video-facts { margin: 8px 0 0; display: grid; gap: 4px; font-size: 12.5px; }
+.hb-video-facts div { display: flex; gap: 10px; flex-wrap: wrap; }
+.hb-video-facts dt { min-width: 74px; color: #686962; }
+.hb-video-facts dd { margin: 0; }
+.hb-video-summary dd { color: #3f5a3c; }
+.hb-note p.is-warning { color: #8a4b00; font-weight: 600; }
+
+/* ───────────── Product detail: full-screen image viewer ───────────── */
+.zoom-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  background: #f8f7f3;
+  color: var(--ink, #161715);
+  overscroll-behavior: contain;
+}
+
+.zoom-thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 12px;
+  overflow-y: auto;
+  border-right: 1px solid #e4e0d6;
+}
+
+.zoom-thumbs button {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  padding: 0;
+  border: 1px solid #e4e0d6;
+  background: #f1efe9;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.zoom-thumbs button.active {
+  border-color: var(--ink, #161715);
+  box-shadow: 0 0 0 1px var(--ink, #161715);
+}
+
+.zoom-thumbs button:focus-visible,
+.zoom-close:focus-visible,
+.zoom-arrow:focus-visible,
+.zoom-toolbar button:focus-visible {
+  outline: 2px solid #b8913f;
+  outline-offset: 2px;
+}
+
+.zoom-thumbs img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoom-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.zoom-stage {
+  position: absolute;
+  inset: 0;
+  /* One definite grid cell the size of the stage: the picture's max-width / max-height percentages resolve against it, so it is always fitted. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: zoom-in;
+}
+
+.zoom-stage.is-zoomed {
+  cursor: grab;
+}
+
+.zoom-stage.is-dragging {
+  cursor: grabbing;
+}
+
+/* The picture is fitted: as large as fits inside the stage at its own proportions, never cropped, never stretched. */
+.zoom-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform .18s ease;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.zoom-stage.is-dragging .zoom-image {
+  transition: none;
+}
+
+.zoom-counter {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  font-size: 11px;
+  letter-spacing: .16em;
+  color: #55564e;
+}
+
+.zoom-counter i {
+  font-style: normal;
+  padding: 0 4px;
+  color: #acaba3;
+}
+
+.zoom-close,
+.zoom-arrow,
+.zoom-toolbar button {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(22, 23, 21, .16);
+  background: rgba(255, 255, 255, .94);
+  color: var(--ink, #161715);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.zoom-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.zoom-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  margin-top: -23px;
+  border-radius: 50%;
+}
+
+.zoom-arrow-prev {
+  left: 14px;
+}
+
+.zoom-arrow-next {
+  right: 14px;
+}
+
+.zoom-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
+.zoom-toolbar button {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.zoom-toolbar button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .zoom-viewer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  /* Phones: thumbnails run along the bottom; swiping and pinching replace the arrows and the zoom buttons. */
+  .zoom-thumbs {
+    grid-row: 2;
+    flex-direction: row;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-top: 1px solid #e4e0d6;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .zoom-thumbs button {
+    width: 52px;
+  }
+
+  .zoom-main {
+    grid-row: 1;
+  }
+
+  .zoom-arrow,
+  .zoom-toolbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticky-line>small,
+  .sticky-price del,
+  .zoom-image,
+  .gallery-wishlist,
+  .detail-share {
+    transition: none;
+  }
 }

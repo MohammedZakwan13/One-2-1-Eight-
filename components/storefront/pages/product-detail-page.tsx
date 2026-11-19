@@ -1,38 +1,55 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
+import { effectiveStockMode, stockLine } from '@/lib/inventory';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCircle2, CircleHelp, Heart, MapPin, Minus, Plus, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Heart, MapPin, Minus, Plus, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
 import { SmartImage } from '@/components/ui/smart-image';
 import { RouteLink } from '@/components/ui/route-link';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { ProductGrid } from '@/components/storefront/product-grid';
 import { Footer } from '@/components/storefront/footer';
-import { money, slugify } from '@/lib/format';
+import { formatProductPaymentNote, formatProductPolicyBadge, formatProductReturnExchangePolicy, formatStoreShippingPolicy, money, slugify } from '@/lib/format';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRuntimeConfig, useUi } from '@/components/providers/app-providers';
+import { useUi } from '@/components/providers/app-providers';
 import { useStorefrontData } from '@/components/providers/storefront-data';
 import { useWishlistToggle } from '@/lib/hooks/use-wishlist-toggle';
+import { ProductShare } from '@/components/storefront/product-share';
+import { ImageZoomViewer } from '@/components/storefront/image-zoom-viewer';
+import { productSharePayload } from '@/lib/product-share';
 import { useCart } from '@/lib/hooks/use-cart';
+import { useCustomer } from '@/lib/hooks/use-customer';
+import { loginUrl } from '@/lib/return-to';
 import { api } from '@/lib/api/client';
 import { errorMessage, isUnauthorized } from '@/lib/api/errors';
 import type { Product, ReviewList } from '@/lib/api/schemas';
-import { discountPercent, variantForSize } from '@/lib/catalog';
+import { discountPercent, savingsAmount, variantForSize } from '@/lib/catalog';
+import { formatGalleryCounter } from '@/lib/gallery-nav';
+import { galleryFit } from '@/lib/gallery-fit';
+import { useProductGallery } from '@/lib/hooks/use-product-gallery';
 
 const EMPTY_REVIEWS: ReviewList = { summary: { average: 0, count: 0, distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 } }, items: [] };
 
-export function ProductDetailPage({ product, related, initialReviews }: { product: Product; related: Product[]; initialReviews: ReviewList | null }) {
+export function ProductDetailPage({ product, related, initialReviews, canonicalUrl }: { product: Product; related: Product[]; initialReviews: ReviewList | null; /** The product's canonical URL from the server (configured site origin + slug); the share button shares exactly this. */ canonicalUrl?: string }) {
   const { settings } = useStorefrontData();
   const { transition: onTransition, notify } = useUi();
   const { wishlist, onToggleWishlist } = useWishlistToggle();
-  const { mock } = useRuntimeConfig();
   const router = useRouter();
   const { addItem } = useCart();
+  // The main image frame has ONE fixed shape for every picture of the product (see the gallery CSS), so nothing about it depends on the loaded picture.
+  const [zoomOpen, setZoomOpen] = useState(false);
+  // Each picture's own proportions, learned as it loads. The FRAME never changes; only how a picture sits in it does (lib/gallery-fit.ts): a picture close to
+  // 2:3 fills the frame, a far-off one (landscape) stays whole. Returning the same object when nothing changed keeps this from re-rendering in a loop.
+  const [ratios, setRatios] = useState<Record<string, number>>({});
+  const noteRatio = (src: string, width: number, height: number) => setRatios(current => (current[src] || !(width > 0 && height > 0) ? current : { ...current, [src]: width / height }));
+  const fitClass = (src: string) => `gallery-fit-${galleryFit(ratios[src])}`;
+  const { customer, isLoading: customerLoading } = useCustomer();
+  // Everything the share menu sends comes from this product's own data; the URL is the canonical production URL built on the server (or by the same rule here).
+  const sharePayload = productSharePayload({ siteUrl: canonicalUrl ? new URL(canonicalUrl).origin : undefined, slug: product.slug, name: product.name, price: product.price, description: product.description, image: product.images[0], brandName: settings.brandName });
   const queryClient = useQueryClient();
   const reviewsQuery = useQuery({ queryKey: ['reviews', product.slug], queryFn: ({ signal }) => api.reviews.list(product.slug, signal), initialData: initialReviews ?? EMPTY_REVIEWS, initialDataUpdatedAt: initialReviews ? Date.now() : 0, staleTime: 30_000 });
   const summary = reviewsQuery.data.summary;
-  const [activeImage, setActiveImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState('');
   const [sizeGuide, setSizeGuide] = useState(false);
   const [deliveryPin, setDeliveryPin] = useState('');
@@ -81,7 +98,54 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
     return () => { document.body.style.overflow = oldOverflow; window.removeEventListener('keydown', closeOnEscape); };
   }, [sizeGuide]);
   const discount = discountPercent(product);
+  const savings = savingsAmount(product);
+  // Phones: while the in-page price row is on screen the bar shows only a compact price; once it scrolls away the bar shows the full summary. One observer flips
+  // a data attribute on the bar directly (CSS does the rest), so scrolling causes no React re-render and no scroll listener.
+  const barRef = useRef<HTMLDivElement>(null);
+  const priceRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const bar = barRef.current; const row = priceRowRef.current;
+    if (!bar || !row || typeof IntersectionObserver === 'undefined') return;
+    const phone = window.matchMedia('(max-width: 760px)');
+    let observer: IntersectionObserver | null = null;
+    let footerObserver: IntersectionObserver | null = null;
+    const connect = () => {
+      observer?.disconnect(); observer = null;
+      footerObserver?.disconnect(); footerObserver = null;
+      if (!phone.matches) { delete bar.dataset.price; delete bar.dataset.footer; return; }
+      // "Visible" means inside the part of the screen between the fixed header (if any) and the top of the purchase bar.
+      const header = document.querySelector('header');
+      const fixedHeader = header && ['fixed', 'sticky'].includes(getComputedStyle(header).position);
+      const top = fixedHeader ? Math.round(header.getBoundingClientRect().height) : 0; // its own height: where it sits once the page has scrolled
+      // The bar's size and CSS offset, not its measured position: the page-enter animation can still be moving it when this first runs.
+      const bottom = Math.round(parseFloat(getComputedStyle(bar).bottom) + bar.offsetHeight);
+      observer = new IntersectionObserver(([entry]) => { bar.dataset.price = entry.isIntersecting ? 'compact' : 'full'; }, { rootMargin: `-${top}px 0px -${bottom}px 0px`, threshold: 0 });
+      observer.observe(row);
+      // The bar steps aside once the footer reaches the top of the bar, so footer content is never covered; the global bottom nav is untouched.
+      const footer = document.querySelector('.site-footer');
+      if (footer) {
+        footerObserver = new IntersectionObserver(([entry]) => { bar.dataset.footer = entry.isIntersecting ? 'hide' : 'show'; }, { rootMargin: `0px 0px -${bottom}px 0px`, threshold: 0 });
+        footerObserver.observe(footer);
+      }
+    };
+    connect();
+    window.addEventListener('resize', connect); // the visible area changes with the browser toolbar and with rotation
+    phone.addEventListener('change', connect);
+    return () => { observer?.disconnect(); footerObserver?.disconnect(); window.removeEventListener('resize', connect); phone.removeEventListener('change', connect); };
+  }, [product.slug]);
+  // The phone bar shows the discount only when there really is one (same source as the price section above; a 0% rounding is not worth advertising).
+  const showSavings = discount > 0 && savings > 0;
+  const isPurchasable = (product.codEnabled !== false) || (product.onlinePaymentEnabled !== false);
+  const policyBadge = formatProductPolicyBadge(product);
+  const paymentNote = formatProductPaymentNote(product);
+  const returnExchangePolicyContent = formatProductReturnExchangePolicy(product, settings);
+  const shippingPolicyContent = formatStoreShippingPolicy(settings);
+
   const add = (goToCheckout = false) => {
+    if (!isPurchasable) {
+      notify('This product is currently not available for purchase.');
+      return;
+    }
     if (!selectedSize) {
       notify('Choose your size to continue.');
       document.getElementById('size-picker')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -110,21 +174,68 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
       setDeliveryMessage(errorMessage(error));
     }
   };
-  const galleryImages = product.images.length ? product.images : [product.images[0]];
+  const galleryImages = (product.images || []).filter(Boolean);
+  const hasMultipleImages = galleryImages.length > 1;
+  // ONE source of truth for the selected image: the thumbnails, the arrows, a swipe, the arrow keys, the dots and the counter all use it.
+  // It belongs to this product, so opening another product starts again at the first image.
+  const gallery = useProductGallery(product.id, galleryImages.length);
+  const activeImage = gallery.index;
+  const counter = formatGalleryCounter(activeImage, galleryImages.length);
+  const currentImage = galleryImages[activeImage] || '';
+  // Sharing is for signed-in customers. A guest is sent to the existing sign-in page and comes straight back to this product afterwards (lib/return-to.ts
+  // only accepts a same-site path); nothing is shared and no share dialog opens for a guest.
+  const beforeShare = () => {
+    if (customer) return true;
+    if (customerLoading) { notify('Checking your sign-in… try again in a moment.'); return false; }
+    notify('Please sign in to share this product.');
+    onTransition();
+    router.push(loginUrl(`/products/${product.slug}`));
+    return false;
+  };
   return <><main className="product-page">
     <div className="breadcrumbs product-breadcrumbs"><RouteLink href="/" onClick={onTransition}>Home</RouteLink><span>/</span><RouteLink href={`/collections/${slugify(product.category)}`} onClick={onTransition}>{product.category}</RouteLink><span>/</span><span>{product.name}</span></div>
     <div className="product-layout">
-      <section className="product-gallery" aria-label="Product images"><div className="gallery-main"><SmartImage src={galleryImages[activeImage % galleryImages.length]} alt={`${product.name} view ${activeImage + 1}`} eager /><span className="gallery-image-number">0{activeImage + 1} <i>/</i> 0{galleryImages.length}</span><button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product"><Heart size={20} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button></div><div className="gallery-thumbnails">{galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => setActiveImage(index)} aria-label={`View product image ${index + 1}`}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}</div><div className="gallery-mobile-dots">{galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} onClick={() => setActiveImage(idx)} />)}</div></section>
-      <section className="product-detail-panel"><div className="detail-label-row"><span className="eyebrow">{product.luxe ? 'ONE 2 1 EIGHT LUXE' : product.newArrival ? 'NEW SEASON / 1218' : 'THE 1218 ESSENTIALS'}</span>{product.badge && <span className="detail-badge">{product.badge}</span>}</div><h1>{product.name}</h1><div className="detail-rating-row"><span className="star-rating"><Star size={14} fill="currentColor" /> {averageRating}</span><span>{displayedReviewCount} reviews</span><button onClick={() => document.getElementById('product-reviews')?.scrollIntoView({ behavior: 'smooth' })}>READ REVIEWS <ArrowDownRight size={13} /></button></div><div className="detail-price-row"><strong>{money(product.price)}</strong>{product.compareAt > product.price && <><del>{money(product.compareAt)}</del><span className="detail-discount">SAVE {discount}%</span></>}</div><p className="tax-note">Inclusive of all taxes</p>{settings.productOfferCode && <div className="detail-offer-strip"><span>{settings.productOfferCode}</span><p>{settings.productOfferText}</p><button onClick={() => { const code = settings.productOfferCode ?? ''; navigator.clipboard?.writeText(code).then(() => notify(`${code} copied. Use it in your bag.`), () => notify(`Use code ${code} in your bag.`)); }}>COPY</button></div>}
+      <section className={`product-gallery ${hasMultipleImages ? 'has-thumbnails' : 'single-image'}`} aria-label="Product images" {...gallery.sectionProps}>
+        <div className="gallery-main" {...gallery.mainProps}>
+          <button type="button" className="gallery-zoom-trigger" onClick={() => { if (!gallery.justSwiped()) setZoomOpen(true); }} aria-label={`Open full-screen view of ${product.name}, image ${activeImage + 1} of ${galleryImages.length || 1}`} aria-haspopup="dialog" disabled={!currentImage}>
+            <SmartImage src={currentImage} alt={`${product.name} view ${activeImage + 1}`} eager className={fitClass(currentImage)} onNaturalSize={(width, height) => noteRatio(currentImage, width, height)} />
+          </button>
+          {hasMultipleImages && <span className="gallery-image-number" aria-live="polite">{counter.current} <i>/</i> {counter.total}</span>}
+          <div className="gallery-actions">
+            <button className={`gallery-wishlist ${wishlist.includes(product.id) ? 'is-saved' : ''}`} onClick={() => onToggleWishlist(product.id)} aria-label="Save product" aria-pressed={wishlist.includes(product.id)}><Heart size={22} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
+          </div>
+          {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-prev" onClick={() => gallery.go(-1)} aria-label="Previous product image"><ChevronLeft size={18} aria-hidden="true" /></button>}
+          {hasMultipleImages && <button type="button" className="gallery-arrow gallery-arrow-next" onClick={() => gallery.go(1)} aria-label="Next product image"><ChevronRight size={18} aria-hidden="true" /></button>}
+        </div>
+        {hasMultipleImages && (
+          <div className="gallery-thumbnails">
+            {galleryImages.map((image, index) => <button key={`${image}-${index}`} className={activeImage === index ? 'active' : ''} onClick={() => gallery.select(index)} aria-label={`View product image ${index + 1}`} aria-current={activeImage === index ? 'true' : undefined}><SmartImage src={image} alt={`${product.name}, view ${index + 1}`} className={fitClass(image)} onNaturalSize={(width, height) => noteRatio(image, width, height)} /><span>{['FRONT', 'BACK', 'DETAIL', 'FIT'][index] || `VIEW ${index + 1}`}</span></button>)}
+          </div>
+        )}
+        {hasMultipleImages && (
+          <div className="gallery-mobile-dots">
+            {galleryImages.map((_, idx) => <button key={idx} className={activeImage === idx ? 'active' : ''} aria-label={`View image ${idx + 1}`} aria-current={activeImage === idx ? 'true' : undefined} onClick={() => gallery.select(idx)} />)}
+          </div>
+        )}
+      </section>
+      <section className="product-detail-panel"><div className="detail-label-row"><span className="eyebrow">{product.luxe ? 'ONE 2 1 EIGHT LUXE' : product.newArrival ? 'NEW SEASON / 1218' : 'THE 1218 ESSENTIALS'}</span><div className="detail-label-actions">{product.badge && <span className="detail-badge">{product.badge}</span>}<ProductShare payload={sharePayload} beforeShare={beforeShare} /></div></div><h1>{product.name}</h1><div className="detail-rating-row"><span className="star-rating"><Star size={14} fill="currentColor" /> {averageRating}</span><span>{displayedReviewCount} reviews</span><button onClick={() => document.getElementById('product-reviews')?.scrollIntoView({ behavior: 'smooth' })}>READ REVIEWS <ArrowDownRight size={13} /></button></div><div className="detail-price-row" ref={priceRowRef}><strong>{money(product.price)}</strong>{product.compareAt > product.price && <><del>{money(product.compareAt)}</del><span className="detail-discount">SAVE {discount}%</span></>}</div><p className="tax-note">Inclusive of all taxes</p>{settings.productOfferCode && <div className="detail-offer-strip"><span>{settings.productOfferCode}</span><p>{settings.productOfferText}</p><button onClick={() => { const code = settings.productOfferCode ?? ''; navigator.clipboard?.writeText(code).then(() => notify(`${code} copied. Use it in your bag.`), () => notify(`Use code ${code} in your bag.`)); }}>COPY</button></div>}
         <div className="detail-colour-block"><div className="detail-section-label"><span>COLOUR</span><strong>{product.color}</strong></div><div className="detail-colour-swatch"><button className="active" style={{ background: product.colorHex }} aria-label={product.color} /><span>{product.color}</span></div></div>
-        <div className="detail-size-block" id="size-picker"><div className="detail-section-label"><span>SELECT SIZE</span><button type="button" className="size-guide-link" onClick={() => setSizeGuide(true)}>SIZE GUIDE <ArrowUpRight size={14} /></button></div><div className="size-options" role="group" aria-label="Choose a size">{product.variants.map(variant => { const soldOut = variant.availability.status === 'out_of_stock'; return <button key={variant.id} type="button" disabled={soldOut} aria-pressed={selectedSize === variant.size} aria-label={soldOut ? `Size ${variant.size}, sold out` : `Size ${variant.size}`} className={`${selectedSize === variant.size ? 'selected' : ''} ${variant.availability.status === 'low_stock' ? 'low-stock' : ''}`} onClick={() => setSelectedSize(variant.size)}>{variant.size}</button>; })}</div><div className="fit-suggestion"><Sparkles size={14} /><span>Designed for a {product.fit.toLowerCase()} silhouette</span></div></div>
-        <button className="button button-dark add-to-bag-button" onClick={() => add()}>ADD TO BAG <span>{money(product.price)}</span><ArrowRight size={17} /></button>
-        <button className="button buy-now-button" onClick={() => add(true)}>BUY NOW <span>{money(product.price)}</span><ArrowRight size={17} /></button>
-        <p className="secure-note"><ShieldCheck size={14} /> Secure checkout · Easy 7-day returns</p>
+        <div className="detail-size-block" id="size-picker"><div className="detail-section-label"><span>SELECT SIZE</span><button type="button" className="size-guide-link" onClick={() => setSizeGuide(true)}>SIZE GUIDE <ArrowUpRight size={14} /></button></div><div className="size-options" role="group" aria-label="Choose a size">{product.variants.map(variant => { const soldOut = variant.availability.status === 'out_of_stock'; return <button key={variant.id} type="button" disabled={soldOut} aria-pressed={selectedSize === variant.size} aria-label={soldOut ? `Size ${variant.size}, sold out` : `Size ${variant.size}`} className={`${selectedSize === variant.size ? 'selected' : ''} ${variant.availability.status === 'low_stock' ? 'low-stock' : ''}`} onClick={() => setSelectedSize(variant.size)}>{variant.size}</button>; })}</div>{(() => { const mode = effectiveStockMode(product); const line = stockLine(mode, product.stockMessage, selectedSize ? variantForSize(product, selectedSize)?.availability.quantity : undefined, product.stockMessageNumber); return line ? <p className={mode === 'custom' ? 'stock-note stock-note-custom' : 'stock-note'} role={mode === 'real' ? 'status' : undefined}>{mode === 'custom' && <span className="stock-note-tag">Note</span>}{line}</p> : null; })()}<div className="fit-suggestion"><Sparkles size={14} /><span>Designed for a {product.fit.toLowerCase()} silhouette</span></div></div>
+        {isPurchasable ? (
+          <>
+            <button className="button button-dark add-to-bag-button inline-purchase" onClick={() => add()}>ADD TO BAG <span>{money(product.price)}</span><ArrowRight size={17} /></button>
+            <button className="button buy-now-button inline-purchase" onClick={() => add(true)}>BUY NOW <span>{money(product.price)}</span><ArrowRight size={17} /></button>
+          </>
+        ) : (
+          <button className="button button-dark add-to-bag-button" disabled style={{ opacity: 0.6, cursor: 'not-allowed' }}>CURRENTLY UNAVAILABLE</button>
+        )}
+        <p className="secure-note"><ShieldCheck size={14} /> Secure checkout · {policyBadge}</p>
+        <p className="secure-note" style={{ margin: '-16px 0 20px', color: isPurchasable ? '#7e8078' : '#e06c75', fontSize: '9px', letterSpacing: '0.04em' }}>{paymentNote}</p>
         <form className="delivery-check" onSubmit={checkDelivery}><label htmlFor="delivery-pin"><MapPin size={15} /> DELIVERY CHECK</label><div className="pin-input-row"><input id="delivery-pin" inputMode="numeric" maxLength={6} value={deliveryPin} onChange={e => { setDeliveryPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeliveryMessage(''); }} placeholder="Enter 6-digit pincode" /><button type="submit">CHECK <ArrowRight size={14} /></button></div>{deliveryMessage && <p className={`delivery-response ${deliveryMessage.startsWith('Good') ? 'available' : 'unavailable'}`}>{deliveryMessage}</p>}</form>
         <div className="product-accordions">{[
           { id: 'description', title: 'DESCRIPTION & FIT', content: <><p>{product.description}</p><ul><li>Fit: {product.fit}</li><li>Material: {product.material}</li><li>Model is styled for an editorial look; use the size guide to select your preferred fit.</li></ul></> },
-          { id: 'shipping', title: 'SHIPPING & RETURNS', content: <p>{settings.returnPolicy} Complimentary shipping over {money(settings.freeShippingThreshold)}. Delivery timelines shown after a valid pincode check are estimates.</p> },
+          { id: 'returns', title: 'RETURNS & EXCHANGES', content: <p>{returnExchangePolicyContent}</p> },
+          { id: 'shipping', title: 'SHIPPING', content: <p>{shippingPolicyContent}</p> },
           { id: 'care', title: 'CARE GUIDE', content: <p>Wash inside out with similar colours. Use a gentle cold wash, avoid bleach and tumble drying, and dry in shade to help preserve colour and shape.</p> },
         ].map(item => <div className={`product-accordion ${activeAccordion === item.id ? 'open' : ''}`} key={item.id}><button onClick={() => setActiveAccordion(current => current === item.id ? '' : item.id)}><span>{item.title}</span>{activeAccordion === item.id ? <Minus size={17} /> : <Plus size={17} />}</button>{activeAccordion === item.id && <div className="accordion-content">{item.content}</div>}</div>)}</div>
       </section>
@@ -158,7 +269,19 @@ export function ProductDetailPage({ product, related, initialReviews }: { produc
     </section>
     <section className="related-products-section"><SectionHeading eyebrow="KEEP THE ROTATION GOING" title="You may also like" description="A few pieces that work well with this one." href={`/collections/${slugify(product.category)}`} onTransition={onTransition} /><ProductGrid products={related} onToggleWishlist={onToggleWishlist} wishlist={wishlist} onTransition={onTransition} /></section>
   </main>
-    {sizeGuide && typeof document !== 'undefined' && createPortal(<div className="modal-layer size-guide-layer" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setSizeGuide(false); }}><section className="size-guide-modal" role="dialog" aria-modal="true" aria-labelledby="size-guide-title"><div className="modal-head"><div><span className="eyebrow">FIND YOUR FIT</span><h2 id="size-guide-title">Size guide</h2></div><button type="button" className="icon-button" onClick={() => setSizeGuide(false)} aria-label="Close size guide"><X /></button></div><p>Use these garment measurements as a guide. For a more relaxed silhouette, consider sizing up.</p><div className="size-guide-table-wrap"><table><thead><tr><th>Size</th><th>Chest</th><th>Shoulder</th><th>Length</th></tr></thead><tbody>{[['S', '36–38 in', '16.5 in', '27 in'], ['M', '38–40 in', '17.5 in', '28 in'], ['L', '40–42 in', '18.5 in', '29 in'], ['XL', '42–44 in', '19.5 in', '30 in'], ['XXL', '44–46 in', '20.5 in', '31 in']].map(row => <tr key={row[0]}><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td></tr>)}</tbody></table></div>{mock && <p className="size-guide-note"><CircleHelp size={15} /> Development placeholder measurements — replace with approved product specifications.</p>}<button type="button" className="button button-dark" onClick={() => setSizeGuide(false)}>GOT IT <Check size={15} /></button></section></div>, document.body)}
-    <div className="mobile-sticky-buy"><div><span>{money(product.price)}</span><small>{selectedSize ? `Size ${selectedSize}` : 'Choose your size'}</small></div><button onClick={() => add()}>ADD TO BAG <ArrowRight size={15} /></button></div>
+    {sizeGuide && typeof document !== 'undefined' && createPortal(<div className="modal-layer size-guide-layer" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setSizeGuide(false); }}><section className="size-guide-modal" role="dialog" aria-modal="true" aria-labelledby="size-guide-title"><div className="modal-head"><div><span className="eyebrow">FIND YOUR FIT</span><h2 id="size-guide-title">Size guide</h2></div><button type="button" className="icon-button" onClick={() => setSizeGuide(false)} aria-label="Close size guide"><X /></button></div><p>Use these garment measurements as a guide. For a more relaxed silhouette, consider sizing up.</p><div className="size-guide-table-wrap"><table><thead><tr><th>Size</th><th>Chest</th><th>Shoulder</th><th>Length</th></tr></thead><tbody>{[['S', '36–38 in', '16.5 in', '27 in'], ['M', '38–40 in', '17.5 in', '28 in'], ['L', '40–42 in', '18.5 in', '29 in'], ['XL', '42–44 in', '19.5 in', '30 in'], ['XXL', '44–46 in', '20.5 in', '31 in']].map(row => <tr key={row[0]}><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td></tr>)}</tbody></table></div><button type="button" className="button button-dark" onClick={() => setSizeGuide(false)}>GOT IT <Check size={15} /></button></section></div>, document.body)}
+    {/* Phones: the purchase actions stay on screen from the moment the page opens and while scrolling (the bar is fixed above the bottom navigation; the in-page pair is hidden on phones). */}
+    <div className="mobile-sticky-buy" role="region" aria-label="Purchase" ref={barRef}>
+      <div className="mobile-sticky-info">
+        <span className="sticky-price"><strong>{money(product.price)}</strong>{showSavings && <del aria-label={`Original price ${money(product.compareAt)}`}>{money(product.compareAt)}</del>}</span>
+        {showSavings
+          ? <span className="sticky-line"><small className="sticky-save"><b className="sticky-off">{discount}% OFF</b><em>You save {money(savings)}</em></small><small className="sticky-hint">{selectedSize ? `Size ${selectedSize}` : 'Choose your size'}</small></span>
+          : <small>{selectedSize ? `Size ${selectedSize}` : 'Choose your size'}</small>}
+      </div>
+      {isPurchasable
+        ? <><button type="button" className="button button-dark mobile-sticky-add" onClick={() => add()}>ADD TO BAG</button><button type="button" className="button buy-now-button mobile-sticky-now" onClick={() => add(true)}>BUY NOW</button></>
+        : <button type="button" className="button button-dark mobile-sticky-add" disabled>CURRENTLY UNAVAILABLE</button>}
+    </div>
+    {zoomOpen && galleryImages.length > 0 && <ImageZoomViewer images={galleryImages} index={activeImage} onIndexChange={gallery.select} onClose={() => setZoomOpen(false)} productName={product.name} />}
     <Footer /></>;
 }

@@ -32,12 +32,15 @@ export function StorefrontShell({ data, children }: { data: StorefrontData; chil
       return;
     }
     const isReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The splash video ends the splash itself (see finishSplash); this is only the safety net if it never plays or ends.
     const splashTimer = window.setTimeout(() => {
       setSplashVisible(false);
       globalInitialSplashDone = true;
-    }, isReduced ? 1200 : 2750);
+    }, isReduced ? 1200 : 10000);
     return () => window.clearTimeout(splashTimer);
   }, [splashVisible]);
+
+  const finishSplash = useCallback(() => { globalInitialSplashDone = true; setSplashVisible(false); }, []);
 
   const transition = useCallback(() => {
     setTransitioning(true);
@@ -99,7 +102,7 @@ export function StorefrontShell({ data, children }: { data: StorefrontData; chil
           <SideMenu open={menuOpen} close={() => setMenuOpen(false)} categories={data.categories} onTransition={transition} />
           <SearchOverlay open={searchOpen} close={() => setSearchOpen(false)} onTransition={transition} />
           {transitioning && !splashVisible && <MovingLoader />}
-          {splashVisible && <MovingLoader initial />}
+          {splashVisible && <MovingLoader initial onDone={finishSplash} />}
         </div>
       </TransitionProvider>
     </StorefrontDataProvider>

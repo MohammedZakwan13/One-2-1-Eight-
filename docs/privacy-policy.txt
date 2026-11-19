@@ -1,0 +1,69 @@
+ONE 2 1 EIGHT ("we", "us") runs the online menswear store at https://one21eight.com. This Privacy Policy explains what personal information we collect when you browse, order or contact us, how we use it, and who helps us process it. You can contact us at one21eight@gmail.com.
+
+INFORMATION WE COLLECT
+
+When you place an order we collect your name, email address, phone number, delivery address, the items you order, and your chosen payment method (online payment or pay on delivery). When you send an enquiry, including bulk or custom order requests, we collect your name, email, phone number, the type and quantity of your request, and your message. If you subscribe to our newsletter we store your email address. We do not currently send newsletter emails. If you sign in, we collect the details needed to identify you, such as your phone number, which you verify with a one-time code.
+
+We do not store your full card details, UPI PIN or bank login credentials in our store database. Online payments are entered with and handled by our payment provider, Razorpay. For each order we keep the payment method you chose, the status of your payment, the amount, and the reference numbers that Razorpay assigns to the payment.
+
+Our website uses cookies and similar storage that are essential to how it works, such as keeping your bag, keeping you signed in and protecting our forms from abuse. We do not use advertising or analytics scripts on our website.
+
+HOW WE USE YOUR INFORMATION
+
+We use your information to process and deliver your orders, take payments, respond to your enquiries and returns, prevent fraud and abuse, and meet our legal obligations. We also use it to prepare order and shipping updates and, once email sending is enabled, to send them to you. Transactional email sending is not yet enabled, so we are not currently sending order or enquiry emails. Newsletter email addresses are stored, but we do not currently send newsletter emails. If we start to, we will send them only to people who subscribed, and you can ask us to remove your address at any time.
+
+EMAILS WE ARE INTRODUCING, AND OUR EMAIL SERVICE
+
+We are introducing emails about your orders and enquiries: an order confirmation, updates when your order is processed, packed, shipped, delivered, cancelled or refunded, shipping details such as the courier name, tracking number and tracking link, and an acknowledgement when you send us an enquiry. These emails will contain your first name, order number, the items, sizes and quantities, the order total, the payment method and, once shipped, the tracking details. Once email sending is enabled, we will also receive an internal notification when you send an enquiry, containing the details you submitted.
+
+These emails are designed to be sent through Resend, an email delivery service, from the sender address orders@send.one21eight.com. Replies will go to our contact address, one21eight@gmail.com. Transactional emails are not enabled until our production email configuration is completed. Once they are enabled, Resend will receive the recipient's email address, the subject and the content of each message so that it can deliver it, and may report back whether the message was delivered, bounced or marked as spam. Resend handles this information under its own terms and privacy policy. We do not use it for advertising.
+
+To send email, the application will use an API key issued by Resend. Once email sending is enabled, the key will be stored as protected configuration on the private server that hosts our website (a Hostinger VPS). It will not be exposed to your browser and will not be written to our database or logs. Only people who administer our server and deployment can access it.
+
+EMAIL RECORDS
+
+For each attempted transactional email, we record the recipient address, the subject, the type of email, the related order or enquiry, the send status, the number and time of send attempts, the service used, the provider's message reference where available, and a short error code if sending failed. These records are kept in our database to track sending attempts and outcomes and, where appropriate, retry eligible failed sends. The body of the email is not stored in these records.
+
+Once transactional email sending is enabled, we cannot guarantee that an email will be delivered. Delivery can be delayed, blocked or filtered by your email provider, and if a send attempt ends in an unclear result we may try again using the same unique reference, which is designed to prevent you from receiving duplicate messages. If you have not received an expected email about your order, please contact us at one21eight@gmail.com.
+
+SERVICES THAT PROCESS YOUR INFORMATION
+
+We rely on trusted service providers to run the store. They process information as needed to provide their services and in accordance with their own terms and privacy policies.
+
+Supabase provides our database, where we store accounts, orders, enquiries and email records.
+
+Resend is our transactional email service. Once email sending is enabled, it will deliver our order and enquiry emails on our behalf.
+
+Razorpay processes online payments. Your payment details are entered with Razorpay and are handled under its own privacy policy.
+
+MSG91 sends and verifies one-time codes for phone sign-in, and hCaptcha helps protect these forms from automated abuse.
+
+Hostinger provides the server that hosts our website and application.
+
+Cloudflare sits in front of our website to deliver it securely and protect it from abuse.
+
+Each of these providers has its own privacy policy and handles information under its own terms. We do not sell your personal information. If we add or change a service that processes your information, we will update this policy.
+
+HOW LONG WE KEEP INFORMATION
+
+We keep order, enquiry and email-record information for as long as we need it to run the store, provide support, handle returns and meet legal, accounting and tax obligations. We have not set a fixed retention period in this policy.
+
+SECURITY
+
+We take reasonable steps to protect your information, including keeping credentials on the server rather than in the browser and limiting who can access our systems. No online service can be completely secure, and we cannot guarantee absolute security.
+
+YOUR RIGHTS AND CHOICES
+
+You can ask us to tell you what personal information we hold about you, to correct it, or to delete it, and you can ask us to remove your address from our newsletter list. Write to one21eight@gmail.com from the email address you used with us and tell us what you would like. We may need to confirm your identity first, and we may need to keep some information, such as order and payment records, where the law requires it or for legitimate business purposes. We will respond to your request as soon as we reasonably can.
+
+CHILDREN
+
+Our store is not directed at children, and we do not knowingly collect information from them.
+
+CHANGES TO THIS POLICY
+
+We may update this policy from time to time. The "Last updated" date at the bottom of this page shows when it was last changed.
+
+CONTACT
+
+For questions about this policy or your information, contact ONE 2 1 EIGHT at one21eight@gmail.com.

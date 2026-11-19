@@ -1,5 +1,5 @@
 import type { Caller } from '@/lib/api/http';
-import { createOrderResponseSchema, orderListSchema, orderSchema, paymentSchema, type CreateOrderRequest } from '@/lib/api/schemas';
+import { createOrderResponseSchema, orderListSchema, orderSchema, paymentSchema, returnSchema, type CreateOrderRequest, type CreateReturnRequest } from '@/lib/api/schemas';
 
 export const ordersRepository = (call: Caller) => ({
   /**
@@ -14,5 +14,10 @@ export const ordersRepository = (call: Caller) => ({
   /** Completes SDK-based payments. The server verifies the signature with the provider – never trust the browser. */
   verifyPayment: (paymentId: string, payload: Record<string, unknown>) =>
     call(`/payments/${encodeURIComponent(paymentId)}/verify`, paymentSchema, { method: 'POST', body: { payload } }),
+  /** Customer/guest cancellation (before shipping). `lookupToken` authorises guests. */
+  cancel: (orderId: string, reason: string, lookupToken?: string) =>
+    call(`/orders/${encodeURIComponent(orderId)}/cancel`, orderSchema, { method: 'POST', body: { reason }, query: { token: lookupToken } }),
+  requestReturn: (orderId: string, request: CreateReturnRequest, lookupToken?: string) =>
+    call(`/orders/${encodeURIComponent(orderId)}/returns`, returnSchema, { method: 'POST', body: request, query: { token: lookupToken } }),
   listMine: (page = 1) => call('/me/orders', orderListSchema, { query: { page, pageSize: 20 } }),
 });

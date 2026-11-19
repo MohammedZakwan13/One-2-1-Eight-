@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   output: process.env.BUILD_STANDALONE === '1' ? 'standalone' : undefined,
   // Product and campaign imagery is served pre-optimised (WebP) from /public or the CDN configured in the CMS.
   images: { unoptimized: true },
+  // The OpenAPI route reads this file at request time, which static tracing cannot see; without it the Vercel function would not contain the file.
+  outputFileTracingIncludes: { '/api/v1/openapi.json': ['./openapi/openapi.yaml'] },
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders(process.env, isDev) },

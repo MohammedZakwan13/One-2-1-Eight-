@@ -4,10 +4,6 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toast } from '@/components/ui/toast';
 
-/** Facts about the running environment that the browser needs. Resolved on the server – never from NEXT_PUBLIC guesses. */
-export type RuntimeConfig = { mock: boolean };
-const RuntimeConfigContext = createContext<RuntimeConfig>({ mock: false });
-export const useRuntimeConfig = () => useContext(RuntimeConfigContext);
 
 type UiContextValue = { notify: (message: string) => void; transition: () => void };
 const UiContext = createContext<UiContextValue>({ notify: () => undefined, transition: () => undefined });
@@ -30,7 +26,7 @@ function makeQueryClient() {
   });
 }
 
-export function AppProviders({ runtime, children }: { runtime: RuntimeConfig; children: React.ReactNode }) {
+export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
   const [toast, setToast] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,13 +40,10 @@ export function AppProviders({ runtime, children }: { runtime: RuntimeConfig; ch
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeConfigContext.Provider value={runtime}>
         <UiContext.Provider value={ui}>
           {children}
           <Toast message={toast} />
-          {runtime.mock && <div className="dev-mock-banner" role="note">DEV MOCK API · no real data or payments</div>}
         </UiContext.Provider>
-      </RuntimeConfigContext.Provider>
     </QueryClientProvider>
   );
 }

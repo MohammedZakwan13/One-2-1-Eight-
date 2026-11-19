@@ -5,25 +5,19 @@ import type { CreateOrderResponse } from '@/lib/api/schemas';
  *
  * The browser NEVER decides that a payment succeeded. Outcomes here only say where to go next;
  * the confirmation page always re-reads the order and reports the payment status the server holds
- * (which, in production, is set from the payment provider's verified webhook).
- *
- * Provider integration point: to support an SDK-based gateway (Razorpay, Cashfree, PhonePe…), add a
- * case for its `provider` id that opens the SDK with `payment.action.payload`, then calls
- * `POST /payments/{id}/verify` and finally navigates to the confirmation URL.
+ * (set from the provider's signature-verified callback or webhook).
  */
 export type PaymentNext =
   | { type: 'confirmation' }
   | { type: 'redirect'; url: string }
-  | { type: 'mock-gateway'; path: string }
+  | { type: 'razorpay'; paymentId: string; payload: Record<string, unknown> }
   | { type: 'unsupported'; provider: string };
 
-export function planPaymentNext(result: CreateOrderResponse, options: { mockEnabled: boolean }): PaymentNext {
+export function planPaymentNext(result: CreateOrderResponse): PaymentNext {
   const action = result.payment.action;
   if (!action) return { type: 'confirmation' };
   if (action.type === 'redirect') return { type: 'redirect', url: action.url };
-  if (action.provider === 'mock-gateway' && options.mockEnabled) {
-    return { type: 'mock-gateway', path: `/mock-payment/${encodeURIComponent(result.payment.id)}?order=${encodeURIComponent(result.order.id)}&token=${encodeURIComponent(result.lookupToken)}` };
-  }
+  if (action.provider === 'razorpay') return { type: 'razorpay', paymentId: result.payment.id, payload: action.payload };
   return { type: 'unsupported', provider: action.provider };
 }
 
